@@ -1,0 +1,13 @@
+# Local environment variables
+.env
+.env.*
+
+# Google credentials
+credentials.json
+service_account.json
+
+# Temporary reports
+*.html
+*.png
+__pycache__/
+*.pyc
