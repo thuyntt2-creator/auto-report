@@ -266,8 +266,10 @@ def build_message(header: str, raw_line: str) -> str:
 
 # ─── FLASK ROUTES ────────────────────────────────────────────
 
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "POST"])
 def health():
+    if request.method == "POST":
+        return webhook()
     return jsonify({
         "status": "ok",
         "message": "Ticket Webhook Server đang chạy ✅",
