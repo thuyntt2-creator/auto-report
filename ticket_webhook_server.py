@@ -270,6 +270,7 @@ def health():
 
 
 @app.route("/webhook", methods=["POST"])
+@app.route("/gtalk/webhook", methods=["POST"])
 def webhook():
     ts = datetime.now().strftime("%H:%M:%S")
 
