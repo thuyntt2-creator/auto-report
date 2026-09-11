@@ -129,6 +129,12 @@ def sync_daily_to_sheet(target_date: date = None):
             r_emp_id = row[1].strip()
             existing_rows[(r_date, r_emp_id)] = idx
 
+    try:
+        from diem_danh_bot import get_m5_required_ams
+        m5_required_map = get_m5_required_ams()
+    except Exception:
+        m5_required_map = {}
+
     batch_updates = []
     rows_to_append = []
 
@@ -197,7 +203,12 @@ def sync_daily_to_sheet(target_date: date = None):
             else:
                 m_texts.append(f"✅ {rec_m5['submit_time']}")
         else:
-            m_texts.append("-")
+            if am_id in m5_required_map:
+                count_missing += 1
+                fine_missing += config["fines"]["not_submitted"]
+                m_texts.append("❌ Chưa nộp (100k)")
+            else:
+                m_texts.append("— (Không có BC <50%)")
 
         am_fine_total = fine_late + fine_missing
 

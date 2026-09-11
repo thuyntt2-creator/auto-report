@@ -438,6 +438,40 @@ def send_gtalk_message(text: str, channel_id: str = None):
     except Exception as e:
         return False, str(e)
 
+def get_m5_required_ams():
+    """
+    Đọc tab 'BC GTC dưới 50' từ Google Sheet để xác định chính xác những AM nào
+    có bưu cục GTC < 50% bắt buộc phải nộp báo cáo Mốc 5 (BC Điểm nóng).
+    Trả về: dict {am_id: {'am': am_dict, 'hubs': [list_of_hubs]}}
+    """
+    try:
+        from sync_attendance_sheets import get_sheet_client, load_config
+        gc = get_sheet_client()
+        sh = gc.open_by_key('147nvGXc2D7UJNJGsWaFjaIZ6FkJDD7Zmevn3lBs-Bl0')
+        ws = sh.worksheet('BC GTC dưới 50')
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            return {}
+
+        config = load_config()
+        parser = AttendanceParser(config)
+        am_hubs_map = {}
+        for r in rows[1:]:
+            if len(r) >= 2 and r[0] and r[1]:
+                hub = r[0].strip()
+                am_str = r[1].strip()
+                matched_am = parser.detect_am(am_str, am_str)
+                if matched_am:
+                    aid = matched_am['id']
+                    if aid not in am_hubs_map:
+                        am_hubs_map[aid] = {'am': matched_am, 'hubs': []}
+                    am_hubs_map[aid]['hubs'].append(hub)
+        return am_hubs_map
+    except Exception as e:
+        print(f"⚠️ Lỗi đọc tab BC GTC dưới 50: {e}")
+        return {}
+
+
 # ─── XÂY DỰNG BẢNG ĐIỂM DANH & TÍNH PHẠT ───────────────────────
 def generate_milestone_recap(milestone_id: int, target_date: date = None):
     if target_date is None:
@@ -454,6 +488,13 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
     date_display = target_date.strftime("%d/%m/%Y")
 
     active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    m5_map = {}
+    if milestone_id == 5:
+        m5_map = get_m5_required_ams()
+        if m5_map:
+            active_ams = [info['am'] for info in m5_map.values()]
+        else:
+            active_ams = []
     total_ams = len(active_ams)
 
     with get_db() as conn:
@@ -603,11 +644,15 @@ def generate_daily_recap(target_date: date = None):
                 am_fine += config["fines"]["invalid"]
                 violations.append(f"Sai ĐK M{m_id} (200k)")
 
-        # Mốc 5 (nếu có ghi nhận)
-        rec_m5 = records.get((am_id, 5))
-        if rec_m5:
+        # Mốc 5 (BC Điểm nóng: Chỉ tính phạt nếu AM có bưu cục < 50% trong tab 'BC GTC dưới 50')
+        m5_required = get_m5_required_ams()
+        if am_id in m5_required:
+            rec_m5 = records.get((am_id, 5))
             has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
-            if rec_m5["status"] == "LATE":
+            if not rec_m5:
+                am_fine += config["fines"]["not_submitted"]
+                violations.append("Chưa nộp M5 (100k)")
+            elif rec_m5["status"] == "LATE":
                 if not (has_excuse_m5 or rec_m5.get("penalty_amount", 0) == 0):
                     am_fine += config["fines"]["late"]
                     violations.append("Trễ M5 (50k)")
