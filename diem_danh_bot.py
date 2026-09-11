@@ -544,6 +544,24 @@ def generate_daily_recap(target_date: date = None):
         for row in cur.fetchall():
             records[(row["am_id"], row["milestone_id"])] = dict(row)
 
+        cur.execute("""
+        SELECT am_id, am_name, milestone_id, reason
+        FROM excuses
+        WHERE date = ?
+        """, (date_str,))
+        excuses_map = {}
+        for row in cur.fetchall():
+            aid = row["am_id"]
+            if aid not in excuses_map:
+                excuses_map[aid] = {
+                    "am_name": row["am_name"],
+                    "milestones": set(),
+                    "reasons": []
+                }
+            excuses_map[aid]["milestones"].add(row["milestone_id"])
+            if row["reason"] and row["reason"] not in excuses_map[aid]["reasons"]:
+                excuses_map[aid]["reasons"].append(row["reason"])
+
     # Đọc danh sách AM được Admin tick Miễn Phạt / Nghỉ Phép trên Google Sheet
     excused_emp_ids = set()
     try:
@@ -560,47 +578,50 @@ def generate_daily_recap(target_date: date = None):
         am_id = am["id"]
         emp_id = str(am.get("employee_id", ""))
         am_fine = 0
-        details = []
+        violations = []
 
         if emp_id and emp_id in excused_emp_ids:
             # AM này được Admin tick Nghỉ phép / Miễn phạt
             excused_ams.append(am["display_name"])
             continue
 
-        # Kiểm tra từng mốc từ 1 đến 4 (mốc 5 nếu có)
+        # Kiểm tra từng mốc từ 1 đến 4
         for m_id in (1, 2, 3, 4):
             rec = records.get((am_id, m_id))
+            has_excuse = am_id in excuses_map and m_id in excuses_map[am_id]["milestones"]
             if not rec:
                 # Không nộp -> Phạt 100k
                 am_fine += config["fines"]["not_submitted"]
-                details.append(f"M{m_id}: ❌ Chưa nộp (100k)")
+                violations.append(f"Chưa nộp M{m_id} (100k)")
             elif rec["status"] == "LATE":
-                am_fine += config["fines"]["late"]
-                details.append(f"M{m_id}: ⚠️ Trễ {rec['late_minutes']}p (50k)")
+                if has_excuse or rec.get("penalty_amount", 0) == 0:
+                    pass  # Đã xin phép -> Miễn phạt 50k
+                else:
+                    am_fine += config["fines"]["late"]
+                    violations.append(f"Trễ M{m_id} (50k)")
             elif rec["status"] == "INVALID":
                 am_fine += config["fines"]["invalid"]
-                details.append(f"M{m_id}: 🚫 Báo cáo sai (200k)")
-            else:
-                details.append(f"M{m_id}: ✅")
+                violations.append(f"Sai ĐK M{m_id} (200k)")
 
         # Mốc 5 (nếu có ghi nhận)
         rec_m5 = records.get((am_id, 5))
         if rec_m5:
+            has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
             if rec_m5["status"] == "LATE":
-                am_fine += config["fines"]["late"]
-                details.append("M5: ⚠️ Trễ (50k)")
+                if not (has_excuse_m5 or rec_m5.get("penalty_amount", 0) == 0):
+                    am_fine += config["fines"]["late"]
+                    violations.append("Trễ M5 (50k)")
             elif rec_m5["status"] == "INVALID":
                 am_fine += config["fines"]["invalid"]
-                details.append("M5: 🚫 Sai (200k)")
-            else:
-                details.append("M5: ✅")
+                violations.append("Sai ĐK M5 (200k)")
 
         total_region_fine += am_fine
-        am_fines.append({
-            "am": am["display_name"],
-            "fine": am_fine,
-            "details": " | ".join(details)
-        })
+        if am_fine > 0:
+            am_fines.append({
+                "am": am["display_name"],
+                "fine": am_fine,
+                "violations": ", ".join(violations)
+            })
 
     # Sắp xếp người bị phạt nhiều nhất lên đầu
     am_fines.sort(key=lambda x: x["fine"], reverse=True)
@@ -608,37 +629,48 @@ def generate_daily_recap(target_date: date = None):
     sheet_url = "https://docs.google.com/spreadsheets/d/147nvGXc2D7UJNJGsWaFjaIZ6FkJDD7Zmevn3lBs-Bl0/edit"
 
     lines = [
-        "📊 <b>BẢNG TỔNG HỢP ĐIỂM DANH & GHI NHẬN PHẠT (DAILY N+1)</b>",
-        f"📅 <i>Ngày chốt: {date_display} | Khu vực: Vùng NTB</i>",
-        "──────────────────────────────",
-        f"💰 <b>TỔNG QUỸ PHẠT CẢ VÙNG:</b> <b>{total_region_fine:,.0f} VNĐ</b>",
-        "",
-        "📋 <b>CHI TIẾT TỪNG AM:</b>"
+        f"📊 <b>CHỐT PHẠT BÁO CÁO NGÀY {date_display} - VÙNG NTB</b>",
+        f"💰 <b>Tổng tiền phạt:</b> <b>{total_region_fine:,.0f} VNĐ</b>",
+        ""
     ]
 
     violators = [item for item in am_fines if item["fine"] > 0]
-    non_violators = [item for item in am_fines if item["fine"] == 0]
-
     if violators:
-        lines.append("🚫 <b>Danh sách phát sinh phạt:</b>")
+        lines.append("🚫 <b>DANH SÁCH VI PHẠM:</b>")
         for idx, v in enumerate(violators, 1):
-            lines.append(f"<b>{idx}. {v['am']}:</b> <code>{v['fine']:,.0f}đ</code>")
-            lines.append(f"   <i>[{v['details']}]</i>")
+            lines.append(f"<b>{idx}. {v['am']}:</b> <code>{v['fine']:,.0f}đ</code> ({v['violations']})")
+        lines.append("")
+    else:
+        lines.append("🎉 <i>Hôm nay cả vùng 100% đúng hạn, không có phát sinh phạt!</i>")
         lines.append("")
 
-    if non_violators:
-        lines.append(f"🌟 <b>Hoàn thành xuất sắc 100% ({len(non_violators)} AM):</b>")
-        lines.append(", ".join([nv["am"] for nv in non_violators]))
+    # Danh sách xin phép trễ
+    if excuses_map:
+        lines.append("📝 <b>DANH SÁCH XIN PHÉP TRỄ:</b>")
+        for aid, ex_info in excuses_map.items():
+            ms_set = ex_info["milestones"]
+            if ms_set == {1, 2, 3, 4, 5} or ms_set == {1, 2, 3, 4}:
+                scope_str = "Cả ngày"
+            elif ms_set == {1, 2, 5}:
+                scope_str = "Ca sáng (M1, M2, M5)"
+            elif ms_set == {3}:
+                scope_str = "Ca chiều (M3: Gán TTS)"
+            elif ms_set == {4}:
+                scope_str = "Ca tối (M4: LTC TTS)"
+            else:
+                ms_sorted = sorted(list(ms_set))
+                scope_str = "Mốc " + ", ".join(str(m) for m in ms_sorted)
+
+            reason_str = " - ".join(ex_info["reasons"]) if ex_info["reasons"] else "Có báo trước"
+            lines.append(f"• <b>{ex_info['am_name']}:</b> {scope_str} (Lý do: <i>{reason_str}</i>)")
         lines.append("")
 
     if excused_ams:
-        lines.append(f"🏖️ <b>Nghỉ phép / Miễn phạt ({len(excused_ams)} AM đã duyệt):</b>")
-        lines.append(", ".join(excused_ams))
+        lines.append(f"🏖️ <b>Nghỉ phép / Miễn phạt:</b> {', '.join(excused_ams)}")
         lines.append("")
 
-    lines.append("──────────────────────────────")
-    lines.append(f"🔗 <b>Bảng Admin theo dõi & thu tiền:</b> <a href=\"{sheet_url}\">Mở Google Sheet</a>")
-    lines.append("👉 <i>Mọi dữ liệu giờ nộp từng giây đã được lưu vết minh bạch trên hệ thống để đối soát.</i>")
+    lines.append(f"🔗 <b>Bảng chi tiết & thu tiền:</b> <a href=\"{sheet_url}\">Mở Google Sheet</a>")
+    lines.append("👉 <i>Mọi dữ liệu giờ nộp từng giây đã được lưu vết minh bạch trên Google Sheet.</i>")
 
     # Tự động đồng bộ số liệu mới nhất lên Google Sheet
     try:
