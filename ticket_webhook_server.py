@@ -80,6 +80,14 @@ app = Flask(__name__)
 # ─── GOOGLE SHEETS ──────────────────────────────────────────
 
 def get_gspread_client():
+    env_json = os.environ.get('GOOGLE_AUTH_JSON')
+    if env_json:
+        try:
+            info = json.loads(env_json)
+            creds = UserCredentials.from_authorized_user_info(info, scopes=SCOPES)
+            return gspread.authorize(creds)
+        except Exception:
+            pass
     for auth_file in AUTH_CANDIDATES:
         if os.path.exists(auth_file):
             try:
