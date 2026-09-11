@@ -145,15 +145,26 @@ class AttendanceParser:
 
         return best_match
 
-    def detect_report_type(self, text: str):
+    def detect_report_type(self, text: str, channel_id: str = ""):
         norm_txt = normalize_text(text)
         no_accent_txt = remove_accents(norm_txt)
+
+        # Nếu gửi vào Group B (Group Báo cáo Điểm nóng) -> Mặc định là Mốc 5
+        group_b_id = str(self.config.get("channel_id_group_b", "2095921878551764992"))
+        if channel_id and str(channel_id) == group_b_id:
+            return 5, "BC Điểm nóng (GTC <50%)"
 
         m1_keywords = ["tổng hợp đầu ngày", "dau ngay", "gtc ngày n-1", "tỷ lệ gtc", "nvpttt"]
         m4_keywords = ["ltc tts", "đơn ltc", "luân chuyển tts", "luan chuyen tts", "lc trước 23h"]
         m2_keywords = ["gán giaotts", "gan giaotts", "trước 9h", "truoc 9h", "trước 11h", "truoc 11h", "gán tts ca 1"]
         m3_keywords = ["trước: 16h", "trước 16h", "truoc 16h", "gán tts ca 2", "ca 2"]
-        m5_keywords = ["điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "time xuất hàng xong", "tồn /tổng", "nv đi làm/ hiện tại"]
+        m5_keywords = [
+            "điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "gtc dưới 50",
+            "xuất hàng xong", "xuat hang xong", "thời gian xuất hàng", "time xuất hàng",
+            "tồn / tổng", "tồn/tổng", "ton / tong", "ton/tong",
+            "nhân viên đi làm", "nhan vien di lam", "nv đi làm", "nv di lam",
+            "bưu cục :", "bưu cục:"
+        ]
 
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m1_keywords):
             return 1, "Tổng hợp đầu ngày"
@@ -187,10 +198,58 @@ class AttendanceParser:
             if "ltc" not in norm_txt and "lc" not in norm_txt:
                 return False, "Thiếu số liệu luân chuyển LTC"
         elif report_type == 5:
-            if "tồn" not in norm_txt and "ton" not in norm_txt and "bưu cục" not in norm_txt:
-                return False, "Thiếu thông tin bưu cục hoặc tồn"
+            has_ton = any(k in norm_txt for k in ["tồn", "ton"])
+            has_xuat = any(k in norm_txt for k in ["xuất hàng", "xuat hang", "time", "thời gian"])
+            has_nv = any(k in norm_txt for k in ["nhân viên", "nhan vien", "nv", "đi làm", "di lam", "hiện tại"])
+            if not (has_ton or has_xuat or has_nv or "bưu cục" in norm_txt):
+                return False, "Thiếu thông tin bưu cục hoặc tồn/nhân sự/xuất hàng"
 
         return True, "Hợp lệ"
+
+
+def detect_hubs_in_text(text: str):
+    """
+    Quét tìm xem trong nội dung tin nhắn có chứa tên bưu cục nào
+    thuộc tab 'BC GTC dưới 50' hay không.
+    Trả về danh sách các bưu cục tìm thấy: [{'raw_hub': ..., 'clean_hub': ..., 'am': am_dict}]
+    """
+    try:
+        from sync_attendance_sheets import get_sheet_client, load_config
+        gc = get_sheet_client()
+        sh = gc.open_by_key('147nvGXc2D7UJNJGsWaFjaIZ6FkJDD7Zmevn3lBs-Bl0')
+        ws = sh.worksheet('BC GTC dưới 50')
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            return []
+
+        config = load_config()
+        parser = AttendanceParser(config)
+
+        norm_msg = normalize_text(text)
+        no_accent_msg = remove_accents(norm_msg)
+
+        matched = []
+        for r in rows[1:]:
+            if len(r) >= 2 and r[0] and r[1]:
+                raw_hub = r[0].strip()
+                am_str = r[1].strip()
+                clean_hub = re.sub(r'^\([A-Za-z0-9]+\)\s*', '', raw_hub).strip()
+                norm_raw = normalize_text(raw_hub)
+                norm_clean = normalize_text(clean_hub)
+                no_acc_clean = remove_accents(norm_clean)
+
+                if norm_raw in norm_msg or norm_clean in norm_msg or no_acc_clean in no_accent_msg:
+                    matched_am = parser.detect_am(am_str, am_str)
+                    matched.append({
+                        'raw_hub': raw_hub,
+                        'clean_hub': clean_hub,
+                        'am_name_sheet': am_str,
+                        'am': matched_am
+                    })
+        return matched
+    except Exception as e:
+        print(f"⚠️ Lỗi detect_hubs_in_text: {e}")
+        return []
 
 # ─── TÍNH PHẠT & GHI NHẬN ─────────────────────────────────────
 def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = None):
@@ -337,7 +396,17 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     parser = AttendanceParser(config)
 
     detected_am = parser.detect_am(raw_text, sender_name)
-    m_id, m_name = parser.detect_report_type(raw_text)
+    m_id, m_name = parser.detect_report_type(raw_text, channel_id)
+
+    # Nếu là Mốc 5 hoặc gửi vào Group B: Quét tìm bưu cục trong tin nhắn
+    matched_hubs = []
+    group_b_id = str(config.get("channel_id_group_b", "2095921878551764992"))
+    if m_id == 5 or (channel_id and str(channel_id) == group_b_id):
+        m_id = 5
+        m_name = "BC Điểm nóng (GTC <50%)"
+        matched_hubs = detect_hubs_in_text(raw_text)
+        if matched_hubs and not detected_am:
+            detected_am = matched_hubs[0]["am"]
 
     if not m_id:
         return None, "Không phải mẫu báo cáo 1-5"
@@ -413,6 +482,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         "late_minutes": late_min,
         "penalty": penalty,
         "note": note,
+        "hubs": [h["raw_hub"] for h in matched_hubs] if matched_hubs else [],
         "submit_time": submit_time.strftime("%H:%M:%S")
     }, "OK"
 
