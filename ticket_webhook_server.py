@@ -278,6 +278,18 @@ def health():
         "time": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
     })
 
+@app.route("/test_sheet", methods=["GET"])
+def test_sheet():
+    try:
+        from sync_attendance_sheets import get_sheet_client
+        gc = get_sheet_client()
+        sh = gc.open_by_key('147nvGXc2D7UJNJGsWaFjaIZ6FkJDD7Zmevn3lBs-Bl0')
+        ws = sh.worksheet('BC GTC dưới 50')
+        rows = ws.get_all_values()
+        return jsonify({"status": "ok", "rows_count": len(rows), "sample": rows[1] if len(rows) > 1 else []})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/webhook", methods=["POST"])
 @app.route("/gtalk/webhook", methods=["POST"])
