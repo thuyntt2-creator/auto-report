@@ -11,3 +11,5 @@ service_account.json
 *.png
 __pycache__/
 *.pyc
+
+authorized_user.json
