@@ -400,8 +400,18 @@ def webhook():
                 f"⏰ <b>Thời gian nộp:</b> {res_dd['submit_time']} — <i>{res_dd['note']}{fine_text}</i>\n"
                 f"{m5_line}"
             ).strip()
-            from diem_danh_bot import send_gtalk_message
-            send_gtalk_message(confirm_msg, channel_id)
+            from diem_danh_bot import send_gtalk_message, load_config
+            cfg_am = load_config()
+            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2095921878551764992")
+            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2077278419534073856")
+
+            # Mốc 5 (BC Điểm nóng) luôn xác nhận vào Group B; Mốc 1-4 xác nhận vào Group gửi đến / Group A
+            if res_dd.get("milestone_id") == 5:
+                reply_channel = group_b_id
+            else:
+                reply_channel = channel_id or group_a_id
+
+            send_gtalk_message(confirm_msg, reply_channel)
 
             # Tự động đồng bộ thời gian thực lên Google Sheet
             try:
