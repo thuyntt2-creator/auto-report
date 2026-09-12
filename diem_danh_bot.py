@@ -1238,18 +1238,31 @@ def start_scheduler():
                     else:
                         print(f"ℹ️ Không có AM nào thiếu báo cáo cho {label}, bỏ qua gửi tin.")
 
-            # Chốt sổ cả ngày lúc 20:15
+            # Chốt sổ cả ngày lúc 20:15 (Ưu tiên gửi ảnh Dashboard cực nét, fallback text nếu lỗi)
             if hm == "20:15":
                 daily_key = f"{today_str}_daily"
                 if daily_key not in last_triggered:
                     last_triggered[daily_key] = True
                     print(f"\n[{now.strftime('%H:%M:%S')}] 🏆 Kích hoạt bảng tổng hợp phạt Daily N+1!")
-                    msg = generate_daily_recap()
-                    ok, err = send_gtalk_message(msg)
-                    if ok:
-                        print("✅ Đã bắn bảng chốt sổ Daily N+1 lên GTalk thành công!")
-                    else:
-                        print(f"❌ Lỗi bắn GTalk: {err}")
+                    sent_image = False
+                    try:
+                        from render_daily_recap_card import send_daily_attendance_recap_image
+                        ok_img, err_img = send_daily_attendance_recap_image()
+                        if ok_img:
+                            sent_image = True
+                            print("✅ Đã bắn ẢNH bảng chốt sổ Daily N+1 lên GTalk thành công!")
+                        else:
+                            print(f"⚠️ Không gửi được ảnh: {err_img}, chuyển sang gửi text.")
+                    except Exception as e_img:
+                        print(f"⚠️ Lỗi render ảnh ({e_img}), chuyển sang gửi text.")
+
+                    if not sent_image:
+                        msg = generate_daily_recap()
+                        ok, err = send_gtalk_message(msg)
+                        if ok:
+                            print("✅ Đã bắn bảng chốt sổ Daily N+1 (Text) lên GTalk thành công!")
+                        else:
+                            print(f"❌ Lỗi bắn GTalk: {err}")
 
             time.sleep(20)
 
