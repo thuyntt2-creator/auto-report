@@ -582,6 +582,45 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
 
         conn.commit()
 
+    # Kiểm tra tiến độ nộp các bưu cục điểm nóng (Mốc 5)
+    m5_progress_note = ""
+    if m_id == 5 and am_id:
+        try:
+            m5_req_map = get_m5_required_ams()
+            req_hubs = m5_req_map.get(am_id, {}).get("hubs", [])
+            if req_hubs:
+                with get_db() as conn_m5:
+                    cur_m = conn_m5.cursor()
+                    cur_m.execute("""
+                    SELECT raw_text FROM raw_messages
+                    WHERE detected_am_id = ? AND detected_milestone = 5 AND DATE(received_at) = ?
+                    """, (am_id, today_str))
+                    all_m5_texts = [row["raw_text"] for row in cur_m.fetchall()]
+
+                reported_hubs = set()
+                combined_texts = all_m5_texts + [raw_text]
+                for t in combined_texts:
+                    found_h = detect_hubs_in_text(t)
+                    for fh in found_h:
+                        reported_hubs.add(fh["raw_hub"])
+
+                covered = [h for h in req_hubs if h in reported_hubs]
+                missing = [h for h in req_hubs if h not in reported_hubs]
+
+                if len(req_hubs) > 1:
+                    if not missing:
+                        m5_progress_note = f"\n🎉 <b>Tiến độ điểm nóng:</b> Đã báo cáo đủ <b>{len(req_hubs)}/{len(req_hubs)} bưu cục</b>!"
+                    else:
+                        miss_str = ", ".join(missing)
+                        m5_progress_note = f"\n📊 <b>Tiến độ điểm nóng:</b> Đã báo cáo <b>{len(covered)}/{len(req_hubs)} bưu cục</b>.\n⚠️ <i>Lưu ý: Còn thiếu bưu cục <b>{miss_str}</b>. Nhờ AM khẩn trương nộp bổ sung BC này trước 10:00!</i>"
+                else:
+                    if not missing:
+                        m5_progress_note = f"\n🎉 <b>Tiến độ điểm nóng:</b> Đã hoàn thành báo cáo bưu cục ({covered[0]})!"
+                    else:
+                        m5_progress_note = f"\n⚠️ <i>Lưu ý: Báo cáo chưa đề cập đúng bưu cục điểm nóng ({req_hubs[0]}). Nhờ AM kiểm tra lại!</i>"
+        except Exception as e_m5:
+            print(f"⚠️ Lỗi check tiến độ bưu cục M5: {e_m5}")
+
     return {
         "am_name": am_name,
         "milestone_id": m_id,
@@ -591,6 +630,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         "penalty": penalty,
         "note": note,
         "hubs": [h["raw_hub"] for h in matched_hubs] if matched_hubs else [],
+        "m5_progress_note": m5_progress_note,
         "submit_time": submit_time.strftime("%H:%M:%S")
     }, "OK"
 
@@ -701,12 +741,35 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
         am_label = am["display_name"]
         rec = records.get(am_id)
 
+        hub_info_str = ""
+        if milestone_id == 5 and rec:
+            req_hubs = m5_map.get(am_id, {}).get("hubs", [])
+            if len(req_hubs) > 1:
+                with get_db() as conn_sub:
+                    cur_s = conn_sub.cursor()
+                    cur_s.execute("""
+                    SELECT raw_text FROM raw_messages
+                    WHERE detected_am_id = ? AND detected_milestone = 5 AND DATE(received_at) = ?
+                    """, (am_id, date_str))
+                    all_m5_texts = [row["raw_text"] for row in cur_s.fetchall()]
+                reported_hubs = set()
+                for t in all_m5_texts:
+                    for fh in detect_hubs_in_text(t):
+                        reported_hubs.add(fh["raw_hub"])
+                covered = [h for h in req_hubs if h in reported_hubs]
+                missing = [h for h in req_hubs if h not in reported_hubs]
+                if missing:
+                    clean_miss = [re.sub(r'^\([A-Za-z0-9]+\)\s*', '', h).strip() for h in missing]
+                    hub_info_str = f" - ⚠️ thiếu BC {', '.join(clean_miss)}"
+                else:
+                    hub_info_str = f" - đủ {len(req_hubs)}/{len(req_hubs)} BC"
+
         if not rec:
             missing_list.append(am_label)
         elif rec["status"] == "ON_TIME":
-            on_time_list.append(f"{am_label} ({rec['submit_time']})")
+            on_time_list.append(f"{am_label} ({rec['submit_time']}{hub_info_str})")
         elif rec["status"] == "LATE":
-            late_list.append(f"{am_label} ({rec['submit_time']} - trễ {rec['late_minutes']}p)")
+            late_list.append(f"{am_label} ({rec['submit_time']} - trễ {rec['late_minutes']}p{hub_info_str})")
         elif rec["status"] == "INVALID":
             invalid_list.append(f"{am_label} ({rec['submit_time']})")
 
