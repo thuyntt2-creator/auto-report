@@ -359,7 +359,7 @@ def webhook():
             
             # Phản hồi xác nhận tức thì vào Group
             status_emoji = "✅" if res_dd["status"] == "ON_TIME" else ("⚠️" if res_dd["status"] == "LATE" else "🚫")
-            fine_text = f" (Phạt {res_dd['penalty']:,}đ)" if res_dd["penalty"] > 0 else " (Đúng hạn - 0đ)"
+            hubs_line = f"🏢 <b>Bưu cục:</b> {', '.join(res_dd['hubs'])}\n" if res_dd.get("hubs") else ""
             m5_line = f"{res_dd['m5_progress_note']}\n" if res_dd.get("m5_progress_note") else ""
             confirm_msg = (
                 f"{status_emoji} <b>XÁC NHẬN ĐÃ GHI NHẬN BÁO CÁO</b>\n"
