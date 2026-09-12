@@ -236,8 +236,16 @@ class AttendanceParser:
 
         m1_keywords = ["tổng hợp đầu ngày", "dau ngay", "gtc ngày n-1", "tỷ lệ gtc", "nvpttt"]
         m4_keywords = ["ltc tts", "đơn ltc", "luân chuyển tts", "luan chuyen tts", "lc trước 23h"]
-        m2_keywords = ["gán giaotts", "gan giaotts", "trước 9h", "truoc 9h", "trước 11h", "truoc 11h", "gán tts ca 1", "gan tts ca 1", "ca 1"]
-        m3_keywords = ["trước: 16h", "trước 16h", "truoc 16h", "gán tts ca 2", "gan tts ca 2", "ca 2"]
+        m2_keywords = [
+            "gán giaotts", "gan giaotts", "gán tts ca 1", "gan tts ca 1", "ca 1",
+            "trước 9h", "truoc 9h", "trước 10h", "truoc 10h", "trước 11h", "truoc 11h",
+            "trước 9h00", "truoc 9h00", "trước 10h00", "truoc 10h00", "trước 11h00", "truoc 11h00"
+        ]
+        m3_keywords = [
+            "gán tts ca 2", "gan tts ca 2", "ca 2",
+            "trước: 16h", "trước 16h", "truoc 16h", "trước 16h00", "truoc 16h00",
+            "trước: 15h", "trước 15h", "truoc 15h", "trước 15h00", "truoc 15h00"
+        ]
         m5_keywords = [
             "điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "gtc dưới 50", "gtc duoi 50", "dưới 50%", "duoi 50%",
             "xuất hàng xong", "xuat hang xong", "thời gian xuất hàng", "time xuất hàng",
@@ -254,12 +262,17 @@ class AttendanceParser:
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m2_keywords):
             return 2, "Gán TTS ca 1"
 
+        if re.search(r'\b(?:trước\s*)?(?:15h|16h)\b', norm_txt):
+            return 3, "Gán TTS ca 2"
+        if re.search(r'\b(?:trước\s*)?(?:9h|10h|11h)\b', norm_txt):
+            return 2, "Gán TTS ca 1"
+
         if re.search(r'tồn\s*/\s*tổng|ton\s*/\s*tong|tồn\s*:\s*\d+|ton\s*:\s*\d+', norm_txt) or any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m5_keywords):
             return 5, "BC Điểm nóng (GTC <50%)"
 
         if "gán tts" in norm_txt or "gan tts" in no_accent_txt:
             # Nếu có từ khóa buổi chiều hoặc gửi sau 13:00 -> Ca 2 (cut-off 16:00), ngược lại -> Ca 1 (cut-off 11:00)
-            if any(k in norm_txt for k in ["ca 2", "16h", "chiều", "chieu"]) or submit_time.hour >= 13:
+            if any(k in norm_txt for k in ["ca 2", "15h", "16h", "chiều", "chieu"]) or submit_time.hour >= 13:
                 return 3, "Gán TTS ca 2"
             return 2, "Gán TTS ca 1"
 
@@ -480,6 +493,19 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
     else:
         diff_sec = (dt - cutoff_dt).total_seconds()
         late_min = max(1, int(diff_sec // 60))
+
+        # Hạn chót nộp bù (Hard deadline theo quy định):
+        # - Ca 1 (Mốc 2): Cut-off 11:00, nộp bù đến 12:00. Sau 12:00 tính Không nộp (Phạt 100k)
+        # - Ca 2 (Mốc 3): Cut-off 16:00, nộp bù đến 17:00. Sau 17:00 tính Không nộp (Phạt 100k)
+        hard_cutoff_map = {
+            2: (12, 0),
+            3: (17, 0)
+        }
+        if milestone_id in hard_cutoff_map:
+            limit_h, limit_m = hard_cutoff_map[milestone_id]
+            limit_dt = dt.replace(hour=limit_h, minute=limit_m, second=0, microsecond=0)
+            if dt > limit_dt:
+                return "NOT_SUBMITTED", late_min, config["fines"]["not_submitted"], f"Quá hạn nộp bù (sau {limit_h:02d}:{limit_m:02d}) — Tính Không nộp"
 
         # Kiểm tra xem AM có xin phép trễ mốc này trong ngày chưa
         if am_id:
@@ -961,10 +987,10 @@ def generate_daily_recap(target_date: date = None):
         for m_id in (1, 2, 3, 4):
             rec = records.get((am_id, m_id))
             has_excuse = am_id in excuses_map and m_id in excuses_map[am_id]["milestones"]
-            if not rec:
-                # Không nộp -> Phạt 100k
+            if not rec or rec["status"] == "NOT_SUBMITTED":
+                # Không nộp hoặc nộp quá hạn bù -> Phạt 100k
                 am_fine += config["fines"]["not_submitted"]
-                violations.append(f"Chưa nộp M{m_id} (100k)")
+                violations.append(f"Không nộp M{m_id} (100k)")
             elif rec["status"] == "LATE":
                 if has_excuse or rec.get("penalty_amount", 0) == 0:
                     pass  # Đã xin phép -> Miễn phạt 50k
@@ -980,9 +1006,9 @@ def generate_daily_recap(target_date: date = None):
         if am_id in m5_required:
             rec_m5 = records.get((am_id, 5))
             has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
-            if not rec_m5:
+            if not rec_m5 or rec_m5["status"] == "NOT_SUBMITTED":
                 am_fine += config["fines"]["not_submitted"]
-                violations.append("Chưa nộp M5 (100k)")
+                violations.append("Không nộp M5 (100k)")
             elif rec_m5["status"] == "LATE":
                 if not (has_excuse_m5 or rec_m5.get("penalty_amount", 0) == 0):
                     am_fine += config["fines"]["late"]
