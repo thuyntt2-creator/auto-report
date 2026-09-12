@@ -383,12 +383,19 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     if report_hits >= 2 or any(k in norm_txt for k in ["tổng hợp đầu ngày", "gán tts ca", "ltc tts", "xuất hàng xong"]):
         return None
 
-    # 2. Kiểm tra từ khóa xin phép của AM (tránh nhận nhầm ghi chú nhân sự nghỉ/off)
+    # 2. Kiểm tra từ khóa xin phép của AM (xin trễ, xin miễn báo cáo, xin off)
     excuse_patterns = [
         r'(?:am|kv|em|mình|tôi)?\s*xin\s+(?:phép\s+)?(?:báo\s+cáo\s+)?(?:nộp\s+)?trễ',
         r'(?:am|kv|em|mình|tôi)?\s*xin\s+trễ',
         r'báo\s+cáo\s+trễ',
         r'xin\s+nộp\s+trễ',
+        r'(?:am|kv|em|mình|tôi)?\s*xin\s+(?:phép\s+)?(?:miễn|khong|không|ko|k)\s+(?:báo\s+cáo|bc|nộp)',
+        r'\bmiễn\s+(?:báo\s+cáo|bc|nộp)\b',
+        r'\b(?:không|khong|ko)\s+(?:báo\s+cáo|bc|nộp)\b',
+        r'xin\s+miễn',
+        r'xin\s+không\s+nộp',
+        r'xin\s+không\s+báo\s+cáo',
+        r'xin\s+khong\s+bao\s+cao',
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?off',
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?nghỉ',
         r'\bnghỉ\s+phép\b',
@@ -412,15 +419,35 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         milestones = [1, 5, 2, 3, 4]
         scope_label = "Cả ngày (Tất cả các mốc)"
         next_reminder = "Chúc AM nghỉ ngơi / công tác tốt nhé!"
-    elif re.search(r'\b(?:chiều|chieu|ca\s*2|16h(?:00)?|mốc\s*3|moc\s*3)\b', norm_txt):
+    elif re.search(r'\b(?:mốc\s*2|moc\s*2|ca\s*1)\b', norm_txt):
+        milestones = [2]
+        scope_label = "Mốc 2 (Gán TTS Ca 1 11h00)"
+        next_reminder = "Các mốc khác vẫn báo cáo đúng timeline quy định nhé!"
+    elif re.search(r'\b(?:mốc\s*3|moc\s*3|ca\s*2)\b', norm_txt):
+        milestones = [3]
+        scope_label = "Mốc 3 (Gán TTS Ca 2 16h00)"
+        next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
+    elif re.search(r'\b(?:mốc\s*5|moc\s*5|điểm\s*nóng|diem\s*nong)\b', norm_txt):
+        milestones = [5]
+        scope_label = "Mốc 5 (BC Điểm nóng 10h00)"
+        next_reminder = "Các mốc khác vẫn báo cáo đúng timeline quy định nhé!"
+    elif re.search(r'\b(?:mốc\s*1|moc\s*1|đầu\s*ngày|dau\s*ngay)\b', norm_txt):
+        milestones = [1]
+        scope_label = "Mốc 1 (Tổng hợp đầu ngày 08h00)"
+        next_reminder = "Các mốc tiếp theo vẫn báo cáo đúng timeline quy định nhé!"
+    elif re.search(r'\b(?:mốc\s*4|moc\s*4|ltc|luân\s*chuyển)\b', norm_txt):
+        milestones = [4]
+        scope_label = "Mốc 4 (LTC TTS 20h00)"
+        next_reminder = "Nhờ AM lưu ý các ca tiếp theo nhé!"
+    elif re.search(r'\b(?:chiều|chieu|16h(?:00)?)\b', norm_txt):
         milestones = [3]
         scope_label = "Ca chiều (Mốc 3 - Gán TTS Ca 2 16h00)"
         next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
-    elif re.search(r'\b(?:ca\s*tối|ca\s*toi|mốc\s*4|moc\s*4|20h(?:00)?)\b', norm_txt):
+    elif re.search(r'\b(?:ca\s*tối|ca\s*toi|20h(?:00)?)\b', norm_txt):
         milestones = [4]
         scope_label = "Ca tối (Mốc 4 - LTC TTS 20h00)"
         next_reminder = "Nhờ AM nộp bù trước khi kết thúc ca làm việc nhé!"
-    elif re.search(r'\b(?:sáng|sang|ca\s*1|đầu\s*ngày|dau\s*ngay|11h(?:00)?|9h(?:00)?|mốc\s*1|mốc\s*2|mốc\s*5)\b', norm_txt):
+    elif re.search(r'\b(?:sáng|sang|11h(?:00)?|9h(?:00)?)\b', norm_txt):
         milestones = [1, 5, 2]
         scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
         next_reminder = "Ca chiều (16h00) và Ca tối (20h00) vẫn báo cáo đúng timeline quy định nhé!"
@@ -460,12 +487,20 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
             ))
         conn.commit()
 
+    is_exemption = any(k in norm_txt for k in ["miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao", "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc"])
+    if is_exemption:
+        action_title = "XÁC NHẬN GHI NHẬN MIỄN BÁO CÁO"
+        action_note = "Đã ghi nhận miễn báo cáo mốc này (0đ phạt)."
+    else:
+        action_title = "XÁC NHẬN GHI NHẬN XIN PHÉP BÁO CÁO TRỄ"
+        action_note = "Nhờ AM nộp bù đúng hạn quy định để được tính Hợp lệ (0đ)."
+
     reply_msg = (
-        f"📝 <b>XÁC NHẬN GHI NHẬN XIN PHÉP BÁO CÁO TRỄ</b>\n"
+        f"📝 <b>{action_title}</b>\n"
         f"👤 <b>AM:</b> {detected_am['full_name']}\n"
         f"🕒 <b>Phạm vi áp dụng:</b> {scope_label}\n"
         f"📌 <b>Lý do ghi nhận:</b> {reason}\n"
-        f"👉 <i>Lưu ý: Nhờ AM nộp bù trong ngày để được tính Hợp lệ (0đ). {next_reminder}</i>"
+        f"👉 <i>Lưu ý: {action_note} {next_reminder}</i>"
     )
 
     return {
@@ -778,8 +813,16 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
         """, (date_str, milestone_id))
         records = {row["am_id"]: dict(row) for row in cur.fetchall()}
 
+        cur.execute("""
+        SELECT am_id, reason
+        FROM excuses
+        WHERE date = ? AND milestone_id = ?
+        """, (date_str, milestone_id))
+        excuse_dict = {row["am_id"]: row["reason"] for row in cur.fetchall()}
+
     on_time_list = []
     late_list = []
+    excused_list = []
     missing_list = []
     invalid_list = []
 
@@ -812,7 +855,10 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
                     hub_info_str = f" - đủ {len(req_hubs)}/{len(req_hubs)} BC"
 
         if not rec:
-            missing_list.append(am_label)
+            if am_id in excuse_dict:
+                excused_list.append(f"{am_label} ({excuse_dict[am_id]})")
+            else:
+                missing_list.append(am_label)
         elif rec["status"] == "ON_TIME":
             on_time_list.append(f"{am_label} ({rec['submit_time']}{hub_info_str})")
         elif rec["status"] == "LATE":
@@ -839,9 +885,9 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
             lines.append(f"  {idx}. {item}")
         lines.append("")
 
-    if invalid_list:
-        lines.append("🚫 <b>Báo cáo sai/thiếu tiêu chí (Phạt 200k):</b>")
-        for idx, item in enumerate(invalid_list, 1):
+    if excused_list:
+        lines.append("📝 <b>Miễn báo cáo / Đã xin phép (0đ):</b>")
+        for idx, item in enumerate(excused_list, 1):
             lines.append(f"  {idx}. {item}")
         lines.append("")
 
@@ -996,16 +1042,16 @@ def generate_daily_recap(target_date: date = None):
         for m_id in (1, 2, 3, 4):
             rec = records.get((am_id, m_id))
             has_excuse = am_id in excuses_map and m_id in excuses_map[am_id]["milestones"]
-            if not rec or rec["status"] == "NOT_SUBMITTED":
+            if has_excuse:
+                # Đã xin phép / Miễn báo cáo mốc này -> Miễn phạt 0đ
+                pass
+            elif not rec or rec["status"] == "NOT_SUBMITTED":
                 # Không nộp hoặc nộp quá hạn bù -> Phạt 100k
                 am_fine += config["fines"]["not_submitted"]
                 violations.append(f"Không nộp M{m_id} (100k)")
             elif rec["status"] == "LATE":
-                if has_excuse or rec.get("penalty_amount", 0) == 0:
-                    pass  # Đã xin phép -> Miễn phạt 50k
-                else:
-                    am_fine += config["fines"]["late"]
-                    violations.append(f"Trễ M{m_id} (50k)")
+                am_fine += config["fines"]["late"]
+                violations.append(f"Trễ M{m_id} (50k)")
             elif rec["status"] == "INVALID":
                 am_fine += config["fines"]["invalid"]
                 violations.append(f"Sai ĐK M{m_id} (200k)")
@@ -1015,13 +1061,15 @@ def generate_daily_recap(target_date: date = None):
         if am_id in m5_required:
             rec_m5 = records.get((am_id, 5))
             has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
-            if not rec_m5 or rec_m5["status"] == "NOT_SUBMITTED":
+            if has_excuse_m5:
+                # Đã xin phép / Miễn báo cáo Mốc 5 -> Miễn phạt 0đ
+                pass
+            elif not rec_m5 or rec_m5["status"] == "NOT_SUBMITTED":
                 am_fine += config["fines"]["not_submitted"]
                 violations.append("Không nộp M5 (100k)")
             elif rec_m5["status"] == "LATE":
-                if not (has_excuse_m5 or rec_m5.get("penalty_amount", 0) == 0):
-                    am_fine += config["fines"]["late"]
-                    violations.append("Trễ M5 (50k)")
+                am_fine += config["fines"]["late"]
+                violations.append("Trễ M5 (50k)")
             elif rec_m5["status"] == "INVALID":
                 am_fine += config["fines"]["invalid"]
                 violations.append("Sai ĐK M5 (200k)")
