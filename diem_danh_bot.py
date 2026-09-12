@@ -563,7 +563,9 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
             if existing:
                 # Nếu trước đó đã nộp Đúng hạn thì không bị ghi đè thành Trễ
                 if existing["status"] == "ON_TIME" and status != "ON_TIME":
-                    pass
+                    status = "ON_TIME"
+                    penalty = 0
+                    note = "Cập nhật bổ sung (Đã ghi nhận đúng hạn trước đó)"
                 else:
                     cur.execute("""
                     UPDATE attendance_records
