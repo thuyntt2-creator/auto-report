@@ -965,26 +965,55 @@ def generate_milestone_reminder(milestone_id: int, target_date: date = None):
         records = {row["am_id"]: dict(row) for row in cur.fetchall()}
 
     missing_list = []
+    missing_hubs_list = []
+
     for am in active_ams:
         am_id = am["id"]
         rec = records.get(am_id)
         if not rec:
             missing_list.append(am["display_name"])
+        elif milestone_id == 5:
+            # Kiểm tra xem AM này có còn thiếu bưu cục nào chưa gửi không
+            req_hubs = m5_map.get(am_id, {}).get("hubs", [])
+            if req_hubs:
+                with get_db() as conn_sub:
+                    cur_s = conn_sub.cursor()
+                    cur_s.execute("""
+                    SELECT raw_text FROM raw_messages
+                    WHERE detected_am_id = ? AND detected_milestone = 5 AND DATE(received_at) = ?
+                    """, (am_id, date_str))
+                    all_m5_texts = [row["raw_text"] for row in cur_s.fetchall()]
+                reported_hubs = set()
+                for t in all_m5_texts:
+                    for fh in detect_hubs_in_text(t):
+                        reported_hubs.add(fh["raw_hub"])
+                missing = [h for h in req_hubs if h not in reported_hubs]
+                if missing:
+                    clean_miss = [re.sub(r'^\([A-Za-z0-9]+\)\s*', '', h).strip() for h in missing]
+                    missing_hubs_list.append(f"<b>{am['display_name']}</b> (còn thiếu: <i>{', '.join(clean_miss)}</i>)")
 
-    if not missing_list:
-        return None  # 100% đã hoàn thành, không cần nhắc nhở
+    if not missing_list and not missing_hubs_list:
+        return None  # 100% đã hoàn thành và đủ bưu cục, không cần nhắc nhở
 
     lines = [
         f"🔔 <b>NHẮC NHỞ NỘP BÙ: MỐC {milestone_id} - {ms_name.upper()}</b>",
-        f"⏰ <i>Mốc cut-off: {cutoff} | Hiện tại vẫn còn <b>{len(missing_list)}/{len(active_ams)} AM</b> chưa nộp:</i>",
+        f"⏰ <i>Mốc cut-off: {cutoff}</i>",
         "──────────────────────────────"
     ]
-    for idx, item in enumerate(missing_list, 1):
-        lines.append(f"  {idx}. {item}")
 
-    lines.append("")
-    lines.append("⚠️ <i>Lưu ý: Báo cáo nộp bây giờ đã tính Báo cáo trễ (Phạt 50.000đ). Nếu không nộp trong ngày sẽ tính Không nộp (Phạt 100.000đ).</i>")
-    lines.append("👉 <b>Nhờ các AM có tên khẩn trương nộp bù ngay!</b>")
+    if missing_list:
+        lines.append(f"❌ <b>AM chưa nộp ({len(missing_list)}/{len(active_ams)}):</b>")
+        for idx, item in enumerate(missing_list, 1):
+            lines.append(f"  {idx}. {item}")
+        lines.append("")
+        lines.append("⚠️ <i>Lưu ý: Báo cáo nộp bây giờ đã tính Báo cáo trễ (Phạt 50.000đ). Nếu không nộp trong ngày sẽ tính Không nộp (Phạt 100.000đ).</i>")
+
+    if missing_hubs_list:
+        lines.append("")
+        lines.append("📌 <b>Nhắc gửi bổ sung bưu cục điểm nóng (Vẫn tính đúng hạn - 0đ):</b>")
+        for item in missing_hubs_list:
+            lines.append(f"  • {item}")
+        lines.append("👉 <i>Nhờ các AM gửi bổ sung số liệu cho các bưu cục trên vào nhóm ạ!</i>")
 
     return "\n".join(lines)
 
