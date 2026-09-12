@@ -494,20 +494,9 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
         diff_sec = (dt - cutoff_dt).total_seconds()
         late_min = max(1, int(diff_sec // 60))
 
-        # Hạn chót nộp bù (Hard deadline theo quy định):
-        # - Ca 1 (Mốc 2): Cut-off 11:00, nộp bù đến 12:00. Sau 12:00 tính Không nộp (Phạt 100k)
-        # - Ca 2 (Mốc 3): Cut-off 16:00, nộp bù đến 17:00. Sau 17:00 tính Không nộp (Phạt 100k)
-        hard_cutoff_map = {
-            2: (12, 0),
-            3: (17, 0)
-        }
-        if milestone_id in hard_cutoff_map:
-            limit_h, limit_m = hard_cutoff_map[milestone_id]
-            limit_dt = dt.replace(hour=limit_h, minute=limit_m, second=0, microsecond=0)
-            if dt > limit_dt:
-                return "NOT_SUBMITTED", late_min, config["fines"]["not_submitted"], f"Quá hạn nộp bù (sau {limit_h:02d}:{limit_m:02d}) — Tính Không nộp"
-
         # Kiểm tra xem AM có xin phép trễ mốc này trong ngày chưa
+        has_excuse = False
+        excuse_reason = ""
         if am_id:
             try:
                 with get_db() as conn:
@@ -517,9 +506,29 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
                     """, (dt.strftime("%Y-%m-%d"), am_id, milestone_id))
                     row = cur.fetchone()
                     if row:
-                        return "ON_TIME", late_min, 0, f"Đã xin phép ({row['reason']}) — Miễn phạt 50k"
+                        has_excuse = True
+                        excuse_reason = row['reason']
             except Exception:
                 pass
+
+        # Hạn chót nộp bù (Hard deadline theo quy định):
+        # - Ca 1 (Mốc 2): Cut-off 11:00, nộp bù đến 12:00. Sau 12:00 tính Không nộp (Phạt 100k)
+        # - Ca 2 (Mốc 3): Cut-off 16:00, nộp bù đến 17:00. Sau 17:00 tính Không nộp (Phạt 100k)
+        # LƯU Ý: Nếu AM ĐÃ XIN PHÉP TRƯỚC ĐÓ -> Miễn phạt, vẫn ghi nhận hợp lệ (0đ)
+        hard_cutoff_map = {
+            2: (12, 0),
+            3: (17, 0)
+        }
+        if milestone_id in hard_cutoff_map:
+            limit_h, limit_m = hard_cutoff_map[milestone_id]
+            limit_dt = dt.replace(hour=limit_h, minute=limit_m, second=0, microsecond=0)
+            if dt > limit_dt:
+                if has_excuse:
+                    return "ON_TIME", late_min, 0, f"Đã xin phép ({excuse_reason}) — Nộp bù sau {limit_h:02d}:{limit_m:02d} (Miễn phạt)"
+                return "NOT_SUBMITTED", late_min, config["fines"]["not_submitted"], f"Quá hạn nộp bù (sau {limit_h:02d}:{limit_m:02d}) — Tính Không nộp"
+
+        if has_excuse:
+            return "ON_TIME", late_min, 0, f"Đã xin phép ({excuse_reason}) — Miễn phạt 50k"
 
         return "LATE", late_min, config["fines"]["late"], f"Trễ {late_min} phút"
 
