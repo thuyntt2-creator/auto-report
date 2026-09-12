@@ -380,8 +380,15 @@ def webhook():
                 pass
 
             return jsonify({"status": "recorded_attendance", "data": res_dd})
+        else:
+            print(f"[{ts}] [ĐIỂM DANH] Bỏ qua: {status_dd}")
+            if status_dd not in ("Không phải mẫu báo cáo 1-5", "Không xác định được AM"):
+                return jsonify({"status": "skipped", "reason": status_dd})
     except Exception as e_dd:
+        import traceback
+        traceback.print_exc()
         print(f"[{ts}] [ĐIỂM DANH] Lỗi: {e_dd}")
+        return jsonify({"status": "error", "error": str(e_dd), "trace": traceback.format_exc()})
 
     # ─── 2. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP (KHI KHÔNG PHẢI BÁO CÁO MỐC) ────────
     try:
