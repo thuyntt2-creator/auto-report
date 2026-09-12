@@ -184,10 +184,10 @@ class AttendanceParser:
         geo_ambiguous = {
             'khánh', 'khanh', 'long', 'lâm', 'lam', 'bình', 'binh',
             'hải', 'hai', 'sơn', 'son', 'đông', 'dong', 'nam', 'bắc', 'bac',
-            'thủy', 'thuy', 'an', 'hòa', 'hoa', 'linh'
+            'thủy', 'thuy', 'an', 'hòa', 'hoa', 'linh', 'thơ', 'tho', 'thu', 'thư'
         }
-        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc|di|quảng|quang)\s+$'
-        geo_next = r'^\s+(?:hòa|hoa|vĩnh|vinh|sơn|son|lâm|lam|điền|dien|nam|bắc|bac|đông|dong|tây|tay|thuận|thuan|định|dinh|trang|nghĩa|nghia)'
+        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc|di|quảng|quang|phúc|phuc|yên|yen|đức|duc)\s+$'
+        geo_next = r'^\s+(?:hòa|hoa|vĩnh|vinh|sơn|son|lâm|lam|điền|dien|nam|bắc|bac|đông|dong|tây|tay|thuận|thuan|định|dinh|trang|nghĩa|nghia|thọ|tho)'
 
         best_match = None
         longest_alias_len = 0
@@ -196,10 +196,17 @@ class AttendanceParser:
             for alias in am.get("aliases", []):
                 na = normalize_text(alias)
                 noa = remove_accents(na)
+                words = na.split()
+
                 p = r'(?:\b|_)' + re.escape(na) + r'(?:\b|_)'
                 p_noa = r'(?:\b|_)' + re.escape(noa) + r'(?:\b|_)'
 
-                m_obj = re.search(p, norm_txt) or re.search(p_noa, no_acc_txt)
+                # Từ đơn trong nội dung tin nhắn bắt buộc phải đúng dấu tiếng Việt để tránh đụng từ (ví dụ: 'thọ' nhầm 'tho')
+                if len(words) == 1 and len(na) <= 5:
+                    m_obj = re.search(p, norm_txt)
+                else:
+                    m_obj = re.search(p, norm_txt) or re.search(p_noa, no_acc_txt)
+
                 if m_obj:
                     # Kiểm tra xem có phải tên bưu cục/địa danh tỉnh huyện trùng với tên AM hay không
                     if na in geo_ambiguous or noa in geo_ambiguous:
@@ -276,6 +283,21 @@ class AttendanceParser:
         return True, "Hợp lệ"
 
 
+def generate_hub_variants(raw_hub: str):
+    """
+    Sinh các biến thể tên bưu cục để bắt được linh hoạt khi AM viết tắt/rút gọn.
+    Ví dụ: '(LDO) Tân Hà Lâm Hà' -> ['(LDO) Tân Hà Lâm Hà', 'Tân Hà Lâm Hà', 'Tân Hà Lâm', 'Tân Hà']
+    """
+    clean = re.sub(r'^\([A-Za-z0-9]+\)\s*', '', raw_hub).strip()
+    variants = [raw_hub, clean]
+    sub_district = re.sub(r'\s*[\-\–]\s*.*$', '', clean)
+    sub_lamha = re.sub(r'\s+lâm\s+hà$', '', clean, flags=re.I)
+    sub_trunc = re.sub(r'\s+hà$', '', clean, flags=re.I)
+    for v in [sub_district, sub_lamha, sub_trunc]:
+        if len(v.strip()) >= 4 and v.strip() not in variants:
+            variants.append(v.strip())
+    return variants
+
 def detect_hubs_in_text(text: str):
     """
     Quét tìm xem trong nội dung tin nhắn có chứa tên bưu cục nào
@@ -302,19 +324,19 @@ def detect_hubs_in_text(text: str):
             if len(r) >= 2 and r[0] and r[1]:
                 raw_hub = r[0].strip()
                 am_str = r[1].strip()
-                clean_hub = re.sub(r'^\([A-Za-z0-9]+\)\s*', '', raw_hub).strip()
-                norm_raw = normalize_text(raw_hub)
-                norm_clean = normalize_text(clean_hub)
-                no_acc_clean = remove_accents(norm_clean)
-
-                if norm_raw in norm_msg or norm_clean in norm_msg or no_acc_clean in no_accent_msg:
-                    matched_am = parser.detect_am(am_str, am_str)
-                    matched.append({
-                        'raw_hub': raw_hub,
-                        'clean_hub': clean_hub,
-                        'am_name_sheet': am_str,
-                        'am': matched_am
-                    })
+                variants = generate_hub_variants(raw_hub)
+                for v in variants:
+                    nv = normalize_text(v)
+                    no_acc_v = remove_accents(nv)
+                    if nv in norm_msg or no_acc_v in no_accent_msg:
+                        matched_am = parser.detect_am(am_str, am_str)
+                        matched.append({
+                            'raw_hub': raw_hub,
+                            'clean_hub': re.sub(r'^\([A-Za-z0-9]+\)\s*', '', raw_hub).strip(),
+                            'am_name_sheet': am_str,
+                            'am': matched_am
+                        })
+                        break
         return matched
     except Exception as e:
         print(f"⚠️ Lỗi detect_hubs_in_text: {e}")
