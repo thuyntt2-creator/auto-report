@@ -1050,6 +1050,7 @@ def generate_daily_recap(target_date: date = None):
     total_region_fine = 0
     am_fines = []
     excused_ams = []
+    m5_required = get_m5_required_ams()
 
     for am in active_ams:
         am_id = am["id"]
@@ -1089,7 +1090,6 @@ def generate_daily_recap(target_date: date = None):
                 violations.append(f"Sai ĐK M{m_id} (200k)")
 
         # Mốc 5 (BC Điểm nóng: Chỉ tính phạt nếu AM có bưu cục < 50% trong tab 'BC GTC dưới 50')
-        m5_required = get_m5_required_ams()
         if am_id in m5_required:
             rec_m5 = records.get((am_id, 5))
             has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
@@ -1154,7 +1154,8 @@ def generate_daily_recap(target_date: date = None):
         lines.append("📝 <b>DANH SÁCH XIN PHÉP TRỄ:</b>")
         for aid, ex_info in excuses_map.items():
             ms_set = ex_info["milestones"]
-            if ms_set == {1, 2, 3, 4, 5} or ms_set == {1, 2, 3, 4}:
+            valid_ms = [m for m in ms_set if m is not None]
+            if None in ms_set or ms_set == {1, 2, 3, 4, 5} or ms_set == {1, 2, 3, 4}:
                 scope_str = "Cả ngày"
             elif ms_set == {1, 2, 5}:
                 scope_str = "Ca sáng (M1, M2, M5)"
@@ -1162,9 +1163,11 @@ def generate_daily_recap(target_date: date = None):
                 scope_str = "Ca chiều (M3: Gán TTS)"
             elif ms_set == {4}:
                 scope_str = "Ca tối (M4: LTC TTS)"
-            else:
-                ms_sorted = sorted(list(ms_set))
+            elif valid_ms:
+                ms_sorted = sorted(valid_ms)
                 scope_str = "Mốc " + ", ".join(str(m) for m in ms_sorted)
+            else:
+                scope_str = "Cả ngày"
 
             reason_str = " - ".join(ex_info["reasons"]) if ex_info["reasons"] else "Có báo trước"
             lines.append(f"• <b>{ex_info['am_name']}:</b> {scope_str} (Lý do: <i>{reason_str}</i>)")
