@@ -184,9 +184,9 @@ class AttendanceParser:
         geo_ambiguous = {
             'khánh', 'khanh', 'long', 'lâm', 'lam', 'bình', 'binh',
             'hải', 'hai', 'sơn', 'son', 'đông', 'dong', 'nam', 'bắc', 'bac',
-            'thủy', 'thuy', 'an', 'hòa', 'hoa'
+            'thủy', 'thuy', 'an', 'hòa', 'hoa', 'linh'
         }
-        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc)\s+$'
+        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc|di|quảng|quang)\s+$'
         geo_next = r'^\s+(?:hòa|hoa|vĩnh|vinh|sơn|son|lâm|lam|điền|dien|nam|bắc|bac|đông|dong|tây|tay|thuận|thuan|định|dinh|trang|nghĩa|nghia)'
 
         best_match = None
@@ -487,7 +487,10 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         m_id = 5
         m_name = "BC Điểm nóng (GTC <50%)"
         matched_hubs = detect_hubs_in_text(raw_text)
-        if matched_hubs and not detected_am:
+        # Báo cáo Mốc 5: Bưu cục thuộc quyền AM nào trong tab 'BC GTC dưới 50' thì ưu tiên AM đó
+        if matched_hubs and matched_hubs[0].get("am"):
+            detected_am = matched_hubs[0]["am"]
+        elif matched_hubs and not detected_am:
             detected_am = matched_hubs[0].get("am")
 
     if not m_id:
