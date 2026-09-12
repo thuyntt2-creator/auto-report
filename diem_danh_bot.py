@@ -110,9 +110,14 @@ def init_db():
             reason TEXT,
             raw_text TEXT,
             created_at DATETIME,
+            excuse_type TEXT DEFAULT 'LATE_PERMIT',
             UNIQUE(date, am_id, milestone_id)
         )
         """)
+        try:
+            cursor.execute("ALTER TABLE excuses ADD COLUMN excuse_type TEXT DEFAULT 'LATE_PERMIT'")
+        except Exception:
+            pass
         conn.commit()
 
 # ─── BỘ BÓC TÁCH (PARSER) ─────────────────────────────────────
@@ -474,20 +479,26 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
             reason = reason_part[:50].split("\n")[0].strip()
             break
 
+    is_exemption = any(k in norm_txt for k in [
+        "miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao",
+        "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc", "cả ngày", "ca ngay",
+        "nguyên ngày", "off", "nghỉ", "nghi"
+    ])
+    excuse_type = "EXEMPTION" if is_exemption else "LATE_PERMIT"
+
     today_str = dt.strftime("%Y-%m-%d")
     with get_db() as conn:
         cur = conn.cursor()
         for m_id in milestones:
             cur.execute("""
-            INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at, excuse_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 today_str, detected_am["id"], detected_am["full_name"], m_id,
-                reason, raw_text, dt.strftime("%Y-%m-%d %H:%M:%S")
+                reason, raw_text, dt.strftime("%Y-%m-%d %H:%M:%S"), excuse_type
             ))
         conn.commit()
 
-    is_exemption = any(k in norm_txt for k in ["miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao", "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc"])
     if is_exemption:
         action_title = "XÁC NHẬN GHI NHẬN MIỄN BÁO CÁO"
         action_note = "Đã ghi nhận miễn báo cáo mốc này (0đ phạt)."
@@ -814,15 +825,16 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
         records = {row["am_id"]: dict(row) for row in cur.fetchall()}
 
         cur.execute("""
-        SELECT am_id, reason
+        SELECT am_id, reason, excuse_type
         FROM excuses
         WHERE date = ? AND milestone_id = ?
         """, (date_str, milestone_id))
-        excuse_dict = {row["am_id"]: row["reason"] for row in cur.fetchall()}
+        excuse_dict = {row["am_id"]: {"reason": row["reason"], "type": dict(row).get("excuse_type", "LATE_PERMIT")} for row in cur.fetchall()}
 
     on_time_list = []
     late_list = []
     excused_list = []
+    late_permit_list = []
     missing_list = []
     invalid_list = []
 
@@ -856,7 +868,10 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
 
         if not rec:
             if am_id in excuse_dict:
-                excused_list.append(f"{am_label} ({excuse_dict[am_id]})")
+                if excuse_dict[am_id]["type"] == "EXEMPTION":
+                    excused_list.append(f"{am_label} ({excuse_dict[am_id]['reason']})")
+                else:
+                    late_permit_list.append(f"{am_label} (Xin trễ: {excuse_dict[am_id]['reason']})")
             else:
                 missing_list.append(am_label)
         elif rec["status"] == "ON_TIME":
@@ -886,13 +901,19 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
         lines.append("")
 
     if excused_list:
-        lines.append("📝 <b>Miễn báo cáo / Đã xin phép (0đ):</b>")
+        lines.append("📝 <b>Miễn báo cáo (0đ):</b>")
         for idx, item in enumerate(excused_list, 1):
             lines.append(f"  {idx}. {item}")
         lines.append("")
 
+    if late_permit_list:
+        lines.append("⏳ <b>Đã xin phép nộp trễ (Cần nộp bù):</b>")
+        for idx, item in enumerate(late_permit_list, 1):
+            lines.append(f"  {idx}. {item}")
+        lines.append("")
+
     if missing_list:
-        lines.append(f"⏳ <b>Chưa nộp tính tới {cutoff} ({len(missing_list)} AM):</b>")
+        lines.append(f"❌ <b>Chưa nộp / Chưa xin phép tính tới {cutoff} ({len(missing_list)} AM):</b>")
         for idx, item in enumerate(missing_list, 1):
             lines.append(f"  {idx}. {item}")
         lines.append("")
@@ -998,7 +1019,7 @@ def generate_daily_recap(target_date: date = None):
             records[(row["am_id"], row["milestone_id"])] = dict(row)
 
         cur.execute("""
-        SELECT am_id, am_name, milestone_id, reason
+        SELECT am_id, am_name, milestone_id, reason, excuse_type
         FROM excuses
         WHERE date = ?
         """, (date_str,))
@@ -1009,9 +1030,12 @@ def generate_daily_recap(target_date: date = None):
                 excuses_map[aid] = {
                     "am_name": row["am_name"],
                     "milestones": set(),
+                    "exemptions": set(),
                     "reasons": []
                 }
             excuses_map[aid]["milestones"].add(row["milestone_id"])
+            if dict(row).get("excuse_type") == "EXEMPTION":
+                excuses_map[aid]["exemptions"].add(row["milestone_id"])
             if row["reason"] and row["reason"] not in excuses_map[aid]["reasons"]:
                 excuses_map[aid]["reasons"].append(row["reason"])
 
@@ -1042,16 +1066,24 @@ def generate_daily_recap(target_date: date = None):
         for m_id in (1, 2, 3, 4):
             rec = records.get((am_id, m_id))
             has_excuse = am_id in excuses_map and m_id in excuses_map[am_id]["milestones"]
-            if has_excuse:
-                # Đã xin phép / Miễn báo cáo mốc này -> Miễn phạt 0đ
+            is_exempt = am_id in excuses_map and m_id in excuses_map[am_id]["exemptions"]
+
+            if is_exempt:
+                # AM xin miễn báo cáo mốc này -> Miễn phạt 0đ
                 pass
             elif not rec or rec["status"] == "NOT_SUBMITTED":
-                # Không nộp hoặc nộp quá hạn bù -> Phạt 100k
+                # Không nộp: Kể cả có xin trễ mà cuối cùng KHÔNG nộp -> Phạt 100k!
                 am_fine += config["fines"]["not_submitted"]
-                violations.append(f"Không nộp M{m_id} (100k)")
+                if has_excuse:
+                    violations.append(f"Xin trễ nhưng không nộp M{m_id} (100k)")
+                else:
+                    violations.append(f"Không nộp M{m_id} (100k)")
             elif rec["status"] == "LATE":
-                am_fine += config["fines"]["late"]
-                violations.append(f"Trễ M{m_id} (50k)")
+                if has_excuse or rec.get("penalty_amount", 0) == 0:
+                    pass  # Đã xin trễ và có nộp bù -> Miễn phạt 50k!
+                else:
+                    am_fine += config["fines"]["late"]
+                    violations.append(f"Trễ M{m_id} (50k)")
             elif rec["status"] == "INVALID":
                 am_fine += config["fines"]["invalid"]
                 violations.append(f"Sai ĐK M{m_id} (200k)")
@@ -1061,12 +1093,26 @@ def generate_daily_recap(target_date: date = None):
         if am_id in m5_required:
             rec_m5 = records.get((am_id, 5))
             has_excuse_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["milestones"]
-            if has_excuse_m5:
-                # Đã xin phép / Miễn báo cáo Mốc 5 -> Miễn phạt 0đ
+            is_exempt_m5 = am_id in excuses_map and 5 in excuses_map[am_id]["exemptions"]
+
+            if is_exempt_m5:
+                # AM xin miễn báo cáo Mốc 5 -> Miễn phạt 0đ
                 pass
             elif not rec_m5 or rec_m5["status"] == "NOT_SUBMITTED":
                 am_fine += config["fines"]["not_submitted"]
-                violations.append("Không nộp M5 (100k)")
+                if has_excuse_m5:
+                    violations.append("Xin trễ nhưng không nộp M5 (100k)")
+                else:
+                    violations.append("Không nộp M5 (100k)")
+            elif rec_m5["status"] == "LATE":
+                if has_excuse_m5 or rec_m5.get("penalty_amount", 0) == 0:
+                    pass  # Đã xin trễ và có nộp bù -> Miễn phạt 50k!
+                else:
+                    am_fine += config["fines"]["late"]
+                    violations.append("Trễ M5 (50k)")
+            elif rec_m5["status"] == "INVALID":
+                am_fine += config["fines"]["invalid"]
+                violations.append("Sai ĐK M5 (200k)")
             elif rec_m5["status"] == "LATE":
                 am_fine += config["fines"]["late"]
                 violations.append("Trễ M5 (50k)")
