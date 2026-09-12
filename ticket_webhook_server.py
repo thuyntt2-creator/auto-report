@@ -297,6 +297,26 @@ def test_sheet():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+recent_logs = []
+
+@app.route("/debug/recent", methods=["GET"])
+def debug_recent():
+    try:
+        from diem_danh_bot import get_db
+        db_rows = []
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, message_id, channel_id, sender_name, received_at, detected_am_name, detected_milestone, is_valid, error_reason FROM raw_messages ORDER BY id DESC LIMIT 15")
+            db_rows = [dict(r) for r in cur.fetchall()]
+        return jsonify({
+            "status": "ok",
+            "recent_logs": recent_logs[-15:],
+            "db_messages": db_rows
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "recent_logs": recent_logs[-15:]})
+
+
 @app.route("/webhook", methods=["POST"])
 @app.route("/gtalk/webhook", methods=["POST"])
 def webhook():
@@ -316,6 +336,16 @@ def webhook():
 
     # Trích text
     msg_text = extract_text(data)
+
+    recent_logs.append({
+        "time": ts,
+        "channel_id": channel_id,
+        "text_preview": msg_text[:120] if msg_text else "(empty)",
+        "keys": list(data.keys())
+    })
+    if len(recent_logs) > 50:
+        recent_logs.pop(0)
+
     if not msg_text:
         print(f"[{ts}] SKIP — Không có nội dung")
         return jsonify({"status": "skipped", "reason": "empty message"})
@@ -335,7 +365,7 @@ def webhook():
     # Chỉ xử lý khi tin nhắn được gửi vào trigger group
     if channel_id and channel_id not in TRIGGER_GROUPS:
         print(f"[{ts}] SKIP — Group {channel_id} không phải trigger group ({TRIGGER_GROUPS})")
-        return jsonify({"status": "skipped", "reason": "not trigger group"})
+        return jsonify({"status": "skipped", "reason": f"not trigger group: {channel_id}"})
 
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
