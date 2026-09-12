@@ -221,7 +221,10 @@ class AttendanceParser:
 
         return best_match
 
-    def detect_report_type(self, text: str, channel_id: str = ""):
+    def detect_report_type(self, text: str, channel_id: str = "", submit_time: datetime = None):
+        if submit_time is None:
+            submit_time = get_vn_now()
+
         norm_txt = normalize_text(text)
         no_accent_txt = remove_accents(norm_txt)
 
@@ -233,8 +236,8 @@ class AttendanceParser:
 
         m1_keywords = ["tổng hợp đầu ngày", "dau ngay", "gtc ngày n-1", "tỷ lệ gtc", "nvpttt"]
         m4_keywords = ["ltc tts", "đơn ltc", "luân chuyển tts", "luan chuyen tts", "lc trước 23h"]
-        m2_keywords = ["gán giaotts", "gan giaotts", "trước 9h", "truoc 9h", "trước 11h", "truoc 11h", "gán tts ca 1"]
-        m3_keywords = ["trước: 16h", "trước 16h", "truoc 16h", "gán tts ca 2", "ca 2"]
+        m2_keywords = ["gán giaotts", "gan giaotts", "trước 9h", "truoc 9h", "trước 11h", "truoc 11h", "gán tts ca 1", "gan tts ca 1", "ca 1"]
+        m3_keywords = ["trước: 16h", "trước 16h", "truoc 16h", "gán tts ca 2", "gan tts ca 2", "ca 2"]
         m5_keywords = [
             "điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "gtc dưới 50", "gtc duoi 50", "dưới 50%", "duoi 50%",
             "xuất hàng xong", "xuat hang xong", "thời gian xuất hàng", "time xuất hàng",
@@ -255,7 +258,8 @@ class AttendanceParser:
             return 5, "BC Điểm nóng (GTC <50%)"
 
         if "gán tts" in norm_txt or "gan tts" in no_accent_txt:
-            if "16h" in norm_txt:
+            # Nếu có từ khóa buổi chiều hoặc gửi sau 13:00 -> Ca 2 (cut-off 16:00), ngược lại -> Ca 1 (cut-off 11:00)
+            if any(k in norm_txt for k in ["ca 2", "16h", "chiều", "chieu"]) or submit_time.hour >= 13:
                 return 3, "Gán TTS ca 2"
             return 2, "Gán TTS ca 1"
 
@@ -501,7 +505,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     parser = AttendanceParser(config)
 
     detected_am = parser.detect_am(raw_text, sender_name)
-    m_id, m_name = parser.detect_report_type(raw_text, channel_id)
+    m_id, m_name = parser.detect_report_type(raw_text, channel_id, submit_time)
 
     # Nếu là Mốc 5 hoặc gửi vào Group B hoặc tìm thấy bưu cục điểm nóng:
     matched_hubs = detect_hubs_in_text(raw_text)
