@@ -316,6 +316,37 @@ def debug_recent():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e), "recent_logs": recent_logs[-15:]})
 
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "ok", "time": get_vn_now().strftime("%Y-%m-%d %H:%M:%S")})
+
+@app.route("/cron/recap/<int:m_id>", methods=["GET", "POST"])
+def trigger_cron_recap(m_id):
+    try:
+        from diem_danh_bot import generate_milestone_recap, send_gtalk_message, load_config
+        cfg = load_config()
+        channel = cfg.get("gtalk", {}).get("channel_id_group_b") if m_id == 5 else cfg.get("gtalk", {}).get("channel_id_group_a")
+        msg = generate_milestone_recap(m_id)
+        if msg:
+            ok, err = send_gtalk_message(msg, channel_id=channel)
+            return jsonify({"status": "ok", "sent": ok, "err": str(err)})
+        return jsonify({"status": "skipped", "reason": "empty message"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/cron/daily", methods=["GET", "POST"])
+def trigger_cron_daily():
+    try:
+        from diem_danh_bot import generate_daily_recap, send_gtalk_message, load_config
+        cfg = load_config()
+        channel = cfg.get("gtalk", {}).get("channel_id_group_a")
+        msg = generate_daily_recap()
+        if msg:
+            ok, err = send_gtalk_message(msg, channel_id=channel)
+            return jsonify({"status": "ok", "sent": ok, "err": str(err)})
+        return jsonify({"status": "skipped", "reason": "empty message"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/webhook", methods=["POST"])
 @app.route("/gtalk/webhook", methods=["POST"])
@@ -603,6 +634,17 @@ def main():
         start_scheduler()
     except Exception as e:
         print(f"⚠️ Attendance scheduler error: {e}")
+
+    # Chạy Self-Ping thread giữ Render luôn thức (chống Free Tier ngủ sau 15 phút)
+    def keep_alive():
+        render_url = "https://auto-report-shol.onrender.com/health"
+        while True:
+            time.sleep(600)  # Ping mỗi 10 phút
+            try:
+                requests.get(render_url, timeout=15)
+            except Exception:
+                pass
+    threading.Thread(target=keep_alive, daemon=True).start()
 
     # Chạy Flask
     app.run(host="0.0.0.0", port=WEBHOOK_PORT, debug=False, use_reloader=False)
