@@ -653,7 +653,14 @@ def get_m5_required_ams():
 # ─── XÂY DỰNG BẢNG ĐIỂM DANH & TÍNH PHẠT ───────────────────────
 def generate_milestone_recap(milestone_id: int, target_date: date = None):
     if target_date is None:
-        target_date = date.today()
+        target_date = get_vn_today()
+
+    # Tự động khôi phục DB từ Google Sheet nếu có (đảm bảo không mất dữ liệu khi restart/redeploy)
+    try:
+        from sync_attendance_sheets import restore_db_from_sheet
+        restore_db_from_sheet(target_date)
+    except Exception as e:
+        print(f"⚠️ restore_db_from_sheet error: {e}")
 
     config = load_config()
     ms_cfg = config["milestones"].get(str(milestone_id))
@@ -742,8 +749,14 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
 
 def generate_daily_recap(target_date: date = None):
     if target_date is None:
-        # Mặc định là ngày hôm nay nếu chạy tối, hoặc ngày N-1 nếu chạy sáng hôm sau
-        target_date = date.today()
+        target_date = get_vn_today()
+
+    # Tự động khôi phục DB từ Google Sheet nếu có
+    try:
+        from sync_attendance_sheets import restore_db_from_sheet
+        restore_db_from_sheet(target_date)
+    except Exception as e:
+        print(f"⚠️ restore_db_from_sheet error: {e}")
 
     config = load_config()
     date_str = target_date.strftime("%Y-%m-%d")

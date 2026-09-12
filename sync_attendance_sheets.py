@@ -79,6 +79,101 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def restore_db_from_sheet(target_date: date = None):
+    """
+    Khôi phục attendance_records và excuses trong SQLite từ Google Sheet 'Theo Dõi Phạt AM'.
+    Cực kỳ hữu ích khi server Render khởi động lại hoặc redeploy làm mất dữ liệu SQLite tạm thời.
+    """
+    if target_date is None:
+        target_date = get_vn_today()
+        
+    date_str = target_date.strftime("%Y-%m-%d")
+    date_display = target_date.strftime("%d/%m/%Y")
+    
+    try:
+        config = load_config()
+        active_map = {str(am.get('employee_id')): am for am in config['ams'] if am.get('is_active', True)}
+        
+        gc = get_sheet_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet(SHEET_TITLE)
+        rows = ws.get_all_values()
+        
+        import re
+        with get_db() as conn:
+            cur = conn.cursor()
+            for row in rows[1:]:
+                if len(row) < 8 or row[0].strip() != date_display:
+                    continue
+                emp_id = row[1].strip()
+                if emp_id not in active_map:
+                    continue
+                am = active_map[emp_id]
+                am_id = am['id']
+                am_name = am['full_name']
+                
+                # Cột auto xin phép (cột 10, index 10)
+                if len(row) > 10 and "📝 Có xin" in row[10]:
+                    reason = row[10].replace("📝 Có xin", "").strip(" ()")
+                    cur.execute("""
+                    INSERT OR IGNORE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at)
+                    VALUES (?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)
+                    """, (date_str, am_id, am_name, reason, row[10]))
+
+                # Các mốc: col 3 -> M1, col 4 -> M2, col 5 -> M3, col 6 -> M4, col 7 -> M5
+                for col_idx, m_id in [(3, 1), (4, 2), (5, 3), (6, 4), (7, 5)]:
+                    if col_idx >= len(row):
+                        continue
+                    val = row[col_idx].strip()
+                    if not val or val.startswith('❌') or val.startswith('—') or val == '-':
+                        continue
+                    
+                    if '✅' in val:
+                        status = 'ON_TIME'
+                        pen = 0
+                    elif '⚠️' in val:
+                        status = 'LATE'
+                        pen = 0 if ('Đã xin' in val or '0đ' in val) else 50000
+                    elif '⏳' in val:
+                        cur.execute("""
+                        INSERT OR IGNORE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at)
+                        VALUES (?, ?, ?, ?, 'Có xin phép', ?, CURRENT_TIMESTAMP)
+                        """, (date_str, am_id, am_name, m_id, val))
+                        continue
+                    elif '🚫' in val:
+                        status = 'INVALID'
+                        pen = config['fines']['invalid']
+                    else:
+                        continue
+                    
+                    time_match = re.search(r'(\d{1,2}:\d{2})', val)
+                    submit_time = time_match.group(1) if time_match else '08:00'
+                    submitted_at = f'{date_str} {submit_time}:00'
+                    
+                    late_m = 0
+                    if status == 'LATE':
+                        lm_match = re.search(r'(\d+)\s*p', val)
+                        if lm_match:
+                            late_m = int(lm_match.group(1))
+                    
+                    cur.execute('''
+                    INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                        submitted_at = excluded.submitted_at,
+                        status = excluded.status,
+                        late_minutes = excluded.late_minutes,
+                        penalty_amount = excluded.penalty_amount,
+                        updated_at = CURRENT_TIMESTAMP
+                    ''', (date_str, am_id, am_name, m_id, submitted_at, status, late_m, pen))
+            conn.commit()
+            print(f"✅ Đã khôi phục attendance_records từ Google Sheet cho ngày {date_display} thành công!")
+            return True
+    except Exception as e:
+        print(f"⚠️ Lỗi khôi phục DB từ Sheet: {e}")
+        return False
+
+
 def sync_daily_to_sheet(target_date: date = None):
     """
     Đồng bộ dữ liệu điểm danh và tiền phạt của ngày target_date lên Google Sheet bằng 1 batch call siêu nhanh.
@@ -153,6 +248,7 @@ def sync_daily_to_sheet(target_date: date = None):
         am_id = am["id"]
         emp_id = str(am.get("employee_id", ""))
         am_name = am["full_name"]
+        row_key = (date_display, emp_id)
 
         m_texts = []
         count_late = 0
@@ -175,8 +271,25 @@ def sync_daily_to_sheet(target_date: date = None):
             rec = records.get((am_id, m_id))
             excuse_m = next((e for e in am_excuses if e.get("milestone_id") == m_id or e.get("milestone_id") is None), None)
 
+            # Đọc giá trị cũ trên sheet nếu có để KHÔNG bao giờ bị ghi đè mất báo cáo
+            old_val = ""
+            if row_key in existing_rows:
+                old_row_data = all_values[existing_rows[row_key] - 1]
+                col_offset = 3 + (m_id - 1)
+                if col_offset < len(old_row_data):
+                    old_val = old_row_data[col_offset].strip()
+
             if not rec:
-                if excuse_m:
+                if old_val.startswith("✅"):
+                    m_texts.append(old_val)
+                elif old_val.startswith("⚠️"):
+                    m_texts.append(old_val)
+                    if "0đ" not in old_val and "Đã xin" not in old_val:
+                        fine_late += config["fines"]["late"]
+                        count_late += 1
+                elif old_val.startswith("⏳"):
+                    m_texts.append(old_val)
+                elif excuse_m:
                     m_texts.append("⏳ Có xin phép")
                 else:
                     fine_missing += config["fines"]["not_submitted"]
@@ -185,7 +298,7 @@ def sync_daily_to_sheet(target_date: date = None):
             elif rec["status"] == "ON_TIME":
                 m_texts.append(f"✅ {rec['submit_time']}")
             elif rec["status"] == "LATE":
-                if excuse_m or am_excuses:
+                if excuse_m or am_excuses or "Đã xin" in old_val:
                     # Đã có xin phép trễ -> TỰ ĐỘNG MIỄN PHẠT 50K (Tính 0đ)!
                     m_texts.append(f"⚠️ Trễ {rec['late_minutes']}p (Đã xin - 0đ)")
                 else:
@@ -200,9 +313,15 @@ def sync_daily_to_sheet(target_date: date = None):
 
         # Mốc 5
         rec_m5 = records.get((am_id, 5))
+        old_val_m5 = ""
+        if row_key in existing_rows:
+            old_row_data = all_values[existing_rows[row_key] - 1]
+            if len(old_row_data) > 7:
+                old_val_m5 = old_row_data[7].strip()
+
         if rec_m5:
             if rec_m5["status"] == "LATE":
-                if am_excuses:
+                if am_excuses or "Đã xin" in old_val_m5:
                     m_texts.append(f"⚠️ Trễ (Đã xin - 0đ)")
                 else:
                     fine_late += rec_m5.get("penalty_amount", 50000)
@@ -214,12 +333,20 @@ def sync_daily_to_sheet(target_date: date = None):
             else:
                 m_texts.append(f"✅ {rec_m5['submit_time']}")
         else:
-            if am_id in m5_required_map:
-                count_missing += 1
-                fine_missing += config["fines"]["not_submitted"]
-                m_texts.append("❌ Chưa nộp (100k)")
+            if old_val_m5.startswith("✅"):
+                m_texts.append(old_val_m5)
+            elif old_val_m5.startswith("⚠️"):
+                m_texts.append(old_val_m5)
+                if "0đ" not in old_val_m5 and "Đã xin" not in old_val_m5:
+                    fine_late += config["fines"]["late"]
+                    count_late += 1
             else:
-                m_texts.append("— (Không có BC <50%)")
+                if am_id in m5_required_map:
+                    count_missing += 1
+                    fine_missing += config["fines"]["not_submitted"]
+                    m_texts.append("❌ Chưa nộp (100k)")
+                else:
+                    m_texts.append("— (Không có BC <50%)")
 
         am_fine_total = fine_late + fine_missing
 

@@ -542,10 +542,15 @@ def main():
         print(f"   Chạy thủ công: ngrok http {WEBHOOK_PORT}")
         print(f"   Sau đó dùng URL https://xxxx.ngrok.app/webhook\n")
 
-    # Chạy Attendance Scheduler
+    # Chạy Attendance Scheduler & Khôi phục DB từ Google Sheet (phòng ngừa restart Render)
     try:
         from diem_danh_bot import init_db, start_scheduler
         init_db()
+        try:
+            from sync_attendance_sheets import restore_db_from_sheet
+            restore_db_from_sheet()
+        except Exception as e_res:
+            print(f"⚠️ Restore from sheet error: {e_res}")
         start_scheduler()
     except Exception as e:
         print(f"⚠️ Attendance scheduler error: {e}")
