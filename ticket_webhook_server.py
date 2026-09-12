@@ -333,25 +333,7 @@ def webhook():
 
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
-    # ─── KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP ────────
-    try:
-        from diem_danh_bot import detect_excuse_request, send_gtalk_message
-        sender_obj = data.get("sender") or msg_obj.get("sender") or {}
-        sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
-        excuse_info = detect_excuse_request(msg_text, sender_name)
-        if excuse_info:
-            print(f"[{ts}] 📝 [XIN PHÉP TRỄ] Đã ghi nhận: {excuse_info['am']['full_name']} - {excuse_info['scope_label']}")
-            send_gtalk_message(excuse_info["reply_msg"], channel_id)
-            try:
-                from sync_attendance_sheets import sync_daily_to_sheet
-                threading.Thread(target=sync_daily_to_sheet, args=(datetime.now().date(),), daemon=True).start()
-            except Exception:
-                pass
-            return jsonify({"status": "recorded_excuse", "data": excuse_info})
-    except Exception as e_ex:
-        print(f"[{ts}] [XIN PHÉP] Lỗi: {e_ex}")
-
-    # ─── KIỂM TRA & GHI NHẬN BÁO CÁO ĐIỂM DANH AM ──────────
+    # ─── 1. KIỂM TRA & GHI NHẬN BÁO CÁO ĐIỂM DANH AM (ƯU TIÊN SỐ 1) ──────────
     try:
         from diem_danh_bot import record_submission
         sender_obj = data.get("sender") or msg_obj.get("sender") or {}
@@ -393,6 +375,24 @@ def webhook():
             return jsonify({"status": "recorded_attendance", "data": res_dd})
     except Exception as e_dd:
         print(f"[{ts}] [ĐIỂM DANH] Lỗi: {e_dd}")
+
+    # ─── 2. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP (KHI KHÔNG PHẢI BÁO CÁO MỐC) ────────
+    try:
+        from diem_danh_bot import detect_excuse_request, send_gtalk_message
+        sender_obj = data.get("sender") or msg_obj.get("sender") or {}
+        sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
+        excuse_info = detect_excuse_request(msg_text, sender_name)
+        if excuse_info:
+            print(f"[{ts}] 📝 [XIN PHÉP TRỄ] Đã ghi nhận: {excuse_info['am']['full_name']} - {excuse_info['scope_label']}")
+            send_gtalk_message(excuse_info["reply_msg"], channel_id)
+            try:
+                from sync_attendance_sheets import sync_daily_to_sheet
+                threading.Thread(target=sync_daily_to_sheet, args=(datetime.now().date(),), daemon=True).start()
+            except Exception:
+                pass
+            return jsonify({"status": "recorded_excuse", "data": excuse_info})
+    except Exception as e_ex:
+        print(f"[{ts}] [XIN PHÉP] Lỗi: {e_ex}")
 
     # Parse danh sách AM (dành cho Cảnh báo Ticket GLT)
     header, am_items = parse_ticket_message(msg_text)

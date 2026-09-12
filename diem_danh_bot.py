@@ -113,7 +113,10 @@ def normalize_text(text: str) -> str:
     return re.sub(r'[\r\t]', ' ', s)
 
 def remove_accents(input_str: str) -> str:
-    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    if not input_str:
+        return ""
+    s = str(input_str).replace('đ', 'd').replace('Đ', 'd')
+    nfkd_form = unicodedata.normalize('NFKD', s)
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 class AttendanceParser:
@@ -123,24 +126,80 @@ class AttendanceParser:
         self.milestones = config.get("milestones", {})
 
     def detect_am(self, text: str, sender_name: str = ""):
-        combined = f"{sender_name}\n{text}"
-        norm_combined = normalize_text(combined)
-        no_accent_combined = remove_accents(norm_combined)
+        norm_txt = normalize_text(text)
+        no_acc_txt = remove_accents(norm_txt)
+        norm_sender = normalize_text(sender_name)
+        no_acc_sender = remove_accents(norm_sender)
+
+        # ── TIER 1: Header / Khai báo trực tiếp (Ưu tiên số 1) ──
+        # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB'
+        header_m = re.search(r'(?:khu\s+vực\s+|kv\s+)?am\s*[:\-\s]\s*([^\n\r,\:\;]+)', norm_txt)
+        if header_m:
+            header_segment = header_m.group(1).strip()
+            no_acc_header = remove_accents(header_segment)
+            best_len = 0
+            best_am = None
+            for am in self.ams:
+                for alias in am.get("aliases", []):
+                    na = normalize_text(alias)
+                    noa = remove_accents(na)
+                    # Khớp ở đầu header segment hoặc dưới dạng từ độc lập
+                    p = r'^(?:\b|_)' + re.escape(na) + r'(?:\b|_)'
+                    p_noa = r'^(?:\b|_)' + re.escape(noa) + r'(?:\b|_)'
+                    if re.search(p, header_segment) or re.search(p_noa, no_acc_header):
+                        if len(na) > best_len:
+                            best_len = len(na)
+                            best_am = am
+            if best_am:
+                return best_am
+
+        # ── TIER 2: Tên người gửi GTalk (sender_name) ──
+        if sender_name:
+            best_len = 0
+            best_am = None
+            for am in self.ams:
+                for alias in am.get("aliases", []):
+                    na = normalize_text(alias)
+                    noa = remove_accents(na)
+                    p = r'(?:\b|_)' + re.escape(na) + r'(?:\b|_)'
+                    p_noa = r'(?:\b|_)' + re.escape(noa) + r'(?:\b|_)'
+                    if re.search(p, norm_sender) or re.search(p_noa, no_acc_sender):
+                        if len(na) > best_len:
+                            best_len = len(na)
+                            best_am = am
+            if best_am:
+                return best_am
+
+        # ── TIER 3 & 4: Tìm kiếm trong nội dung tin nhắn có lọc địa danh (Geo-Guards) ──
+        geo_ambiguous = {
+            'khánh', 'khanh', 'long', 'lâm', 'lam', 'bình', 'binh',
+            'hải', 'hai', 'sơn', 'son', 'đông', 'dong', 'nam', 'bắc', 'bac',
+            'thủy', 'thuy', 'an', 'hòa', 'hoa'
+        }
+        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc)\s+$'
+        geo_next = r'^\s+(?:hòa|hoa|vĩnh|vinh|sơn|son|lâm|lam|điền|dien|nam|bắc|bac|đông|dong|tây|tay|thuận|thuan|định|dinh|trang|nghĩa|nghia)'
 
         best_match = None
         longest_alias_len = 0
 
         for am in self.ams:
             for alias in am.get("aliases", []):
-                norm_alias = normalize_text(alias)
-                no_accent_alias = remove_accents(norm_alias)
+                na = normalize_text(alias)
+                noa = remove_accents(na)
+                p = r'(?:\b|_)' + re.escape(na) + r'(?:\b|_)'
+                p_noa = r'(?:\b|_)' + re.escape(noa) + r'(?:\b|_)'
 
-                pattern = r'(?:\b|_)' + re.escape(norm_alias) + r'(?:\b|_)'
-                pattern_no_accent = r'(?:\b|_)' + re.escape(no_accent_alias) + r'(?:\b|_)'
-
-                if re.search(pattern, norm_combined) or re.search(pattern_no_accent, no_accent_combined):
-                    if len(norm_alias) > longest_alias_len:
-                        longest_alias_len = len(norm_alias)
+                m_obj = re.search(p, norm_txt) or re.search(p_noa, no_acc_txt)
+                if m_obj:
+                    # Kiểm tra xem có phải tên bưu cục/địa danh tỉnh huyện trùng với tên AM hay không
+                    if na in geo_ambiguous or noa in geo_ambiguous:
+                        start, end = m_obj.start(), m_obj.end()
+                        before = norm_txt[:start]
+                        after = norm_txt[end:]
+                        if re.search(geo_prev, before) or re.search(geo_next, after):
+                            continue
+                    if len(na) > longest_alias_len:
+                        longest_alias_len = len(na)
                         best_match = am
 
         return best_match
@@ -255,6 +314,7 @@ def detect_hubs_in_text(text: str):
 def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = None):
     """
     Tự động phát hiện khi AM nhắn tin xin phép báo cáo trễ / xin off phép.
+    Bảo đảm không nhận diện nhầm khi AM gửi báo cáo nghiệp vụ (chứa ghi chú nhân sự nghỉ).
     """
     if dt is None:
         dt = datetime.now()
@@ -262,15 +322,27 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     norm_txt = normalize_text(raw_text)
     no_accent_txt = remove_accents(norm_txt)
 
+    # 1. BẢO VỆ TUYỆT ĐỐI: Bỏ qua ngay lập tức nếu tin nhắn là báo cáo vận hành
+    report_keywords = [
+        "tổng hợp đầu ngày", "dau ngay", "đầu ngày", "tỷ lệ gtc", "ty le gtc", "gtc ngày n-1", "gtc",
+        "nvpttt", "leadtime", "đơn giao tồn", "gán giaotts", "gan giaotts", "ltc tts",
+        "xuất hàng xong", "xuat hang xong", "thời gian xuất hàng", "tồn / tổng", "ton / tong",
+        "bưu cục :", "bưu cục:", "doanh thu sme", "trả hàng:", "tra hang:"
+    ]
+    report_hits = sum(1 for k in report_keywords if k in norm_txt or remove_accents(k) in no_accent_txt)
+    if report_hits >= 2 or any(k in norm_txt for k in ["tổng hợp đầu ngày", "gán tts ca", "ltc tts", "xuất hàng xong"]):
+        return None
+
+    # 2. Kiểm tra từ khóa xin phép của AM (tránh nhận nhầm ghi chú nhân sự nghỉ/off)
     excuse_patterns = [
-        r'xin\s+(?:phép\s+)?(?:báo\s+cáo\s+)?(?:nộp\s+)?trễ',
-        r'xin\s+trễ',
+        r'(?:am|kv|em|mình|tôi)?\s*xin\s+(?:phép\s+)?(?:báo\s+cáo\s+)?(?:nộp\s+)?trễ',
+        r'(?:am|kv|em|mình|tôi)?\s*xin\s+trễ',
         r'báo\s+cáo\s+trễ',
         r'xin\s+nộp\s+trễ',
-        r'xin\s+(?:phép\s+)?off',
-        r'xin\s+(?:phép\s+)?nghỉ',
-        r'nghỉ\s+phép',
-        r'off\s+phép'
+        r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?off',
+        r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?nghỉ',
+        r'\bnghỉ\s+phép\b',
+        r'\boff\s+phép\b'
     ]
 
     is_excuse = any(re.search(p, norm_txt) or re.search(remove_accents(p), no_accent_txt) for p in excuse_patterns)
@@ -280,25 +352,25 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     config = load_config()
     parser = AttendanceParser(config)
     detected_am = parser.detect_am(raw_text, sender_name)
-    if not detected_am:
+    if not detected_am and sender_name:
         detected_am = parser.detect_am(sender_name, "")
     if not detected_am:
         return None
 
-    # Xác định phạm vi mốc
+    # 3. Xác định phạm vi mốc với ranh giới từ chính xác (tránh >120H nhầm 20h)
     if any(k in norm_txt for k in ["cả ngày", "ca ngay", "nguyên ngày", "hôm nay off", "hom nay off"]):
         milestones = [1, 5, 2, 3, 4]
         scope_label = "Cả ngày (Tất cả các mốc)"
         next_reminder = "Chúc AM nghỉ ngơi / công tác tốt nhé!"
-    elif any(k in norm_txt for k in ["chiều", "chieu", "ca 2", "16h", "mốc 3", "moc 3"]):
+    elif re.search(r'\b(?:chiều|chieu|ca\s*2|16h(?:00)?|mốc\s*3|moc\s*3)\b', norm_txt):
         milestones = [3]
         scope_label = "Ca chiều (Mốc 3 - Gán TTS Ca 2 16h00)"
         next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
-    elif any(k in norm_txt for k in ["tối", "toi", "ltc", "20h", "mốc 4", "moc 4"]):
+    elif re.search(r'\b(?:ca\s*tối|ca\s*toi|mốc\s*4|moc\s*4|20h(?:00)?)\b', norm_txt):
         milestones = [4]
         scope_label = "Ca tối (Mốc 4 - LTC TTS 20h00)"
         next_reminder = "Nhờ AM nộp bù trước khi kết thúc ca làm việc nhé!"
-    elif any(k in norm_txt for k in ["sáng", "sang", "ca 1", "đầu ngày", "dau ngay", "11h", "mốc 1", "mốc 2", "mốc 5"]):
+    elif re.search(r'\b(?:sáng|sang|ca\s*1|đầu\s*ngày|dau\s*ngay|11h(?:00)?|9h(?:00)?|mốc\s*1|mốc\s*2|mốc\s*5)\b', norm_txt):
         milestones = [1, 5, 2]
         scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
         next_reminder = "Ca chiều (16h00) và Ca tối (20h00) vẫn báo cáo đúng timeline quy định nhé!"
