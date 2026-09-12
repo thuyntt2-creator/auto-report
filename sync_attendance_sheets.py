@@ -12,7 +12,18 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 import json
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))
+
+def get_vn_now() -> datetime:
+    """Trả về thời gian hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
+    return datetime.now(VN_TZ).replace(tzinfo=None)
+
+def get_vn_today() -> date:
+    """Trả về ngày hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
+    return get_vn_now().date()
+
 import gspread
 from google.oauth2.credentials import Credentials
 
@@ -73,7 +84,7 @@ def sync_daily_to_sheet(target_date: date = None):
     Đồng bộ dữ liệu điểm danh và tiền phạt của ngày target_date lên Google Sheet bằng 1 batch call siêu nhanh.
     """
     if target_date is None:
-        target_date = date.today()
+        target_date = get_vn_today()
 
     date_str = target_date.strftime("%Y-%m-%d")
     date_display = target_date.strftime("%d/%m/%Y")
@@ -318,7 +329,7 @@ def sync_daily_to_sheet(target_date: date = None):
 
 def get_admin_excused_ams(target_date: date = None):
     if target_date is None:
-        target_date = date.today()
+        target_date = get_vn_today()
     date_display = target_date.strftime("%d/%m/%Y")
 
     try:

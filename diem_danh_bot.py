@@ -13,7 +13,17 @@ import sqlite3
 import argparse
 import threading
 import unicodedata
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+
+VN_TZ = timezone(timedelta(hours=7))
+
+def get_vn_now() -> datetime:
+    """Trả về thời gian hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
+    return datetime.now(VN_TZ).replace(tzinfo=None)
+
+def get_vn_today() -> date:
+    """Trả về ngày hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
+    return get_vn_now().date()
 
 import requests
 import urllib3
@@ -317,7 +327,7 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     Bảo đảm không nhận diện nhầm khi AM gửi báo cáo nghiệp vụ (chứa ghi chú nhân sự nghỉ).
     """
     if dt is None:
-        dt = datetime.now()
+        dt = get_vn_now()
 
     norm_txt = normalize_text(raw_text)
     no_accent_txt = remove_accents(norm_txt)
@@ -462,7 +472,7 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
 
 def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, submit_time=None):
     if submit_time is None:
-        submit_time = datetime.now()
+        submit_time = get_vn_now()
 
     config = load_config()
     parser = AttendanceParser(config)
@@ -478,23 +488,25 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         m_name = "BC Điểm nóng (GTC <50%)"
         matched_hubs = detect_hubs_in_text(raw_text)
         if matched_hubs and not detected_am:
-            detected_am = matched_hubs[0]["am"]
+            detected_am = matched_hubs[0].get("am")
 
     if not m_id:
         return None, "Không phải mẫu báo cáo 1-5"
 
-    is_valid, err_reason = parser.validate_content(m_id, raw_text)
+    if not detected_am:
+        return None, "Không xác định được AM"
 
-    am_id = detected_am["id"] if detected_am else None
-    am_name = detected_am["full_name"] if detected_am else (sender_name or "Chưa rõ AM")
+    # Kiểm tra nội dung bắt buộc
+    is_valid, reason = parser.validate_content(m_id, raw_text)
+    status, late_min, penalty, note = evaluate_submission(submit_time, m_id, is_valid, config, detected_am["id"])
 
-    status, late_min, penalty, note = evaluate_submission(submit_time, m_id, is_valid, config, am_id)
-
+    # Lưu DB
+    am_id = detected_am["id"]
+    am_name = detected_am["full_name"]
     today_str = submit_time.strftime("%Y-%m-%d")
 
     with get_db() as conn:
         cur = conn.cursor()
-        # Lưu raw_messages
         cur.execute("""
         INSERT INTO raw_messages (
             message_id, channel_id, sender_id, sender_name, raw_text,
@@ -504,8 +516,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         """, (
             msg_id, channel_id, sender_id, sender_name, raw_text,
             submit_time.strftime("%Y-%m-%d %H:%M:%S"), am_id, am_name, m_id,
-            1 if is_valid else 0, err_reason if not is_valid else "",
-            status, late_min, penalty
+            1 if is_valid else 0, reason, status, late_min, penalty
         ))
         raw_msg_id = cur.lastrowid
 
@@ -530,7 +541,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
                     WHERE id = ?
                     """, (
                         submit_time.strftime("%Y-%m-%d %H:%M:%S"), status, late_min, penalty,
-                        raw_msg_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), existing["id"]
+                        raw_msg_id, get_vn_now().strftime("%Y-%m-%d %H:%M:%S"), existing["id"]
                     ))
             else:
                 cur.execute("""
@@ -541,7 +552,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
                 """, (
                     today_str, am_id, am_name, m_id,
                     submit_time.strftime("%Y-%m-%d %H:%M:%S"), status, late_min, penalty,
-                    raw_msg_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    raw_msg_id, get_vn_now().strftime("%Y-%m-%d %H:%M:%S")
                 ))
 
         conn.commit()
@@ -875,7 +886,7 @@ def start_scheduler():
         print("⏰ Scheduler đã khởi động: Giám sát các mốc 08:00, 10:00, 11:00, 16:00, 20:00 & 20:15...")
 
         while True:
-            now = datetime.now()
+            now = get_vn_now()
             today_str = now.strftime("%Y-%m-%d")
             hm = now.strftime("%H:%M")
 
@@ -948,7 +959,7 @@ def extract_text(data: dict) -> str:
 
 @app.route("/", methods=["GET"])
 def index():
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = get_vn_now().strftime("%Y-%m-%d %H:%M:%S")
     return jsonify({
         "status": "online",
         "service": "GTalk Attendance & Cut-off Bot - Vùng NTB",
@@ -958,7 +969,7 @@ def index():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    ts = datetime.now().strftime("%H:%M:%S")
+    ts = get_vn_now().strftime("%H:%M:%S")
     try:
         data = request.get_json(force=True, silent=True) or {}
     except Exception:

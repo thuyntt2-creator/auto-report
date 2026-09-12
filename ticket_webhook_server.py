@@ -22,7 +22,13 @@ import time
 import json
 import unicodedata
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))
+
+def get_vn_now() -> datetime:
+    """Trả về thời gian hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
+    return datetime.now(VN_TZ).replace(tzinfo=None)
 
 import requests
 import urllib3
@@ -231,7 +237,7 @@ def parse_ticket_message(text: str):
 def send_gtalk(group_id: str, text: str, oa_token: str):
     payload = {
         "channelId": str(group_id),
-        "clientMsgId": str(int(datetime.now().timestamp() * 1000)),
+        "clientMsgId": str(int(get_vn_now().timestamp() * 1000)),
         "content": {"parseMode": "HTML", "text": text},
         "oaToken": oa_token,
     }
@@ -275,7 +281,7 @@ def health():
         "message": "Ticket Webhook Server đang chạy ✅",
         "trigger_groups": TRIGGER_GROUPS,
         "spreadsheet_id": SPREADSHEET_ID,
-        "time": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "time": get_vn_now().strftime("%d/%m/%Y %H:%M:%S"),
     })
 
 @app.route("/test_sheet", methods=["GET"])
@@ -294,7 +300,7 @@ def test_sheet():
 @app.route("/webhook", methods=["POST"])
 @app.route("/gtalk/webhook", methods=["POST"])
 def webhook():
-    ts = datetime.now().strftime("%H:%M:%S")
+    ts = get_vn_now().strftime("%H:%M:%S")
 
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -368,7 +374,7 @@ def webhook():
             # Tự động đồng bộ thời gian thực lên Google Sheet
             try:
                 from sync_attendance_sheets import sync_daily_to_sheet
-                threading.Thread(target=sync_daily_to_sheet, args=(datetime.now().date(),), daemon=True).start()
+                threading.Thread(target=sync_daily_to_sheet, args=(get_vn_now().date(),), daemon=True).start()
             except Exception:
                 pass
 
@@ -387,7 +393,7 @@ def webhook():
             send_gtalk_message(excuse_info["reply_msg"], channel_id)
             try:
                 from sync_attendance_sheets import sync_daily_to_sheet
-                threading.Thread(target=sync_daily_to_sheet, args=(datetime.now().date(),), daemon=True).start()
+                threading.Thread(target=sync_daily_to_sheet, args=(get_vn_now().date(),), daemon=True).start()
             except Exception:
                 pass
             return jsonify({"status": "recorded_excuse", "data": excuse_info})
