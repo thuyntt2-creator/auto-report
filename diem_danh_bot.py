@@ -235,7 +235,7 @@ class AttendanceParser:
 
         # Nếu gửi vào Group B (Group Báo cáo Điểm nóng) -> Mặc định là Mốc 5
         gtalk_cfg = self.config.get("gtalk", {})
-        group_b_id = str(self.config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2095921878551764992")
+        group_b_id = str(self.config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2097270568973508608")
         if channel_id and str(channel_id) == group_b_id:
             return 5, "BC Điểm nóng (GTC <50%)"
 
@@ -591,7 +591,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     # Nếu là Mốc 5 hoặc gửi vào Group B hoặc tìm thấy bưu cục điểm nóng:
     matched_hubs = detect_hubs_in_text(raw_text)
     gtalk_cfg = config.get("gtalk", {})
-    group_b_id = str(config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2095921878551764992")
+    group_b_id = str(config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2097270568973508608")
 
     if not m_id and matched_hubs:
         m_id = 5
@@ -1231,8 +1231,8 @@ def start_scheduler():
 
             config = load_config()
             cfg_gtalk = config.get("gtalk", {})
-            group_a = cfg_gtalk.get("channel_id_group_a", "2077278419534073856")
-            group_b = cfg_gtalk.get("channel_id_group_b", "2095921878551764992")
+            group_a = cfg_gtalk.get("channel_id_group_a", "2097277790030348288")
+            group_b = cfg_gtalk.get("channel_id_group_b", "2097270568973508608")
 
             # Danh sách mốc cần bắn recap và nhắc nộp bù theo từng Group
             schedule_map = {

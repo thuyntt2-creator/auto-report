@@ -51,7 +51,7 @@ except Exception:
 
 # ─── CẤU HÌNH ───────────────────────────────────────────────
 OA_TOKEN        = "2077276776281051136:8hMHvBBU8qXKps3mLPzgKBucPLSQPg3Y"
-TRIGGER_GROUPS   = ["2077278419534073856", "2095921878551764992"]   # Group nhận tin nhắn → trigger bắn sang các AM
+TRIGGER_GROUPS   = ["2097277790030348288", "2097270568973508608", "2077278419534073856", "2095921878551764992"]   # Group nhận tin nhắn → trigger bắn sang các AM
 STATIC_DOMAIN    = "spring-provoke-valley.ngrok-free.dev"
 SPREADSHEET_ID  = "1MtbZBgRFwCWj6uQKsSqddiJ2GsTiEvKxRIPSshDa5PM"
 SHEET_TAB       = "ticket"
@@ -433,8 +433,8 @@ def webhook():
             ).strip()
             from diem_danh_bot import send_gtalk_message, load_config
             cfg_am = load_config()
-            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2095921878551764992")
-            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2077278419534073856")
+            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
+            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
 
             # Mốc 5 (BC Điểm nóng) luôn xác nhận vào Group B; Mốc 1-4 xác nhận vào Group gửi đến / Group A
             if res_dd.get("milestone_id") == 5:

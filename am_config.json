@@ -1,9 +1,9 @@
 {
   "gtalk": {
     "token": "2077276776281051136:8hMHvBBU8qXKps3mLPzgKBucPLSQPg3Y",
-    "channel_id": "2077278419534073856",
-    "channel_id_group_a": "2077278419534073856",
-    "channel_id_group_b": "2095921878551764992",
+    "channel_id": "2097277790030348288",
+    "channel_id_group_a": "2097277790030348288",
+    "channel_id_group_b": "2097270568973508608",
     "api_url": "https://mbff.ghn.vn/api/gtalk/send-message"
   },
   "fines": {
