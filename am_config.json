@@ -644,7 +644,7 @@
       "id": "am_dai_lm",
       "full_name": "Lê Minh Đại",
       "display_name": "AM Minh Đại (LM)",
-      "is_active": true,
+      "is_active": false,
       "aliases": [
         "lê minh đại",
         "le minh dai",
@@ -675,7 +675,7 @@
       "employee_id": "201477",
       "full_name": "Trần Lê Vương",
       "display_name": "AM Vương",
-      "is_active": true,
+      "is_active": false,
       "aliases": [
         "201477",
         "am vuong",
@@ -696,7 +696,7 @@
       "id": "am_phi_nh",
       "full_name": "Hoàng",
       "display_name": "AM Hoàng",
-      "is_active": true,
+      "is_active": false,
       "aliases": [
         "hoàng",
         "hoang",
@@ -713,7 +713,7 @@
       "employee_id": "3009060",
       "full_name": "Lực",
       "display_name": "AM Lực",
-      "is_active": true,
+      "is_active": false,
       "aliases": [
         "3009060",
         "am luc",
