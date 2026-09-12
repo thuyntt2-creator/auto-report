@@ -112,13 +112,7 @@ def restore_db_from_sheet(target_date: date = None):
                 am_id = am['id']
                 am_name = am['full_name']
                 
-                # Cột auto xin phép (cột 10, index 10)
-                if len(row) > 10 and "📝 Có xin" in row[10]:
-                    reason = row[10].replace("📝 Có xin", "").strip(" ()")
-                    cur.execute("""
-                    INSERT OR IGNORE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at)
-                    VALUES (?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)
-                    """, (date_str, am_id, am_name, reason, row[10]))
+                # Không parse lại từ Cột 10 để tránh vòng lặp nhân bản lý do vô tận vào DB
 
                 # Các mốc: col 3 -> M1, col 4 -> M2, col 5 -> M3, col 6 -> M4, col 7 -> M5
                 for col_idx, m_id in [(3, 1), (4, 2), (5, 3), (6, 4), (7, 5)]:
@@ -287,10 +281,13 @@ def sync_daily_to_sheet(target_date: date = None):
                     if "0đ" not in old_val and "Đã xin" not in old_val:
                         fine_late += config["fines"]["late"]
                         count_late += 1
-                elif old_val.startswith("⏳"):
-                    m_texts.append(old_val)
                 elif excuse_m:
                     m_texts.append("⏳ Có xin phép")
+                elif old_val.startswith("⏳"):
+                    # Cũ là ⏳ nhưng trong DB hiện không còn xin phép -> chuyển thành Chưa nộp!
+                    fine_missing += config["fines"]["not_submitted"]
+                    count_missing += 1
+                    m_texts.append("❌ Chưa nộp (100k)")
                 else:
                     fine_missing += config["fines"]["not_submitted"]
                     count_missing += 1
