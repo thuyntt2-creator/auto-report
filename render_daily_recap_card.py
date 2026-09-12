@@ -266,7 +266,7 @@ def generate_daily_recap_html(data: dict) -> str:
   .text-primary {{ color: #2563eb !important; }}
 
   /* Table */
-  .table-wrapper {{ padding: 24px 32px; }}
+  .table-wrapper {{ padding: 24px 32px 30px; }}
   table {{
     width: 100%;
     border-collapse: collapse;
@@ -403,10 +403,7 @@ def generate_daily_recap_html(data: dict) -> str:
 <body>
 <div class="card-container">
   <div class="header">
-    <div>
-      <div class="brand-title">📊 BẢNG TỔNG HỢP ĐIỂM DANH & CHỐT PHẠT VÙNG NTB</div>
-      <div class="brand-subtitle">Hệ thống theo dõi nộp báo cáo tự động 5 mốc giờ chuẩn xác theo giây</div>
-    </div>
+    <div class="brand-title">📊 BẢNG TỔNG HỢP ĐIỂM DANH & CHỐT PHẠT VÙNG NTB</div>
     <div class="date-badge">📅 NGÀY {data['date_display']}</div>
   </div>
 
@@ -447,11 +444,6 @@ def generate_daily_recap_html(data: dict) -> str:
         {"".join(rows_html)}
       </tbody>
     </table>
-  </div>
-
-  <div class="footer">
-    <div>🔗 Chi tiết Google Sheet: <span class="footer-link">Theo Dõi Phạt AM - Vùng NTB</span> (Dữ liệu lưu vết minh bạch)</div>
-    <div>⏰ Xuất dữ liệu: {data['generated_at']}</div>
   </div>
 </div>
 </body>
