@@ -200,7 +200,6 @@ def generate_daily_recap_html(data: dict) -> str:
           <td class="center"><span class="{r['m4']['class']}">{r['m4']['text']}</span></td>
           <td class="center"><span class="{r['m5']['class']}">{r['m5']['text']}</span></td>
           <td class="right font-black {fine_class}">{fine_text}</td>
-          <td>{note_html}</td>
         </tr>
         """)
 
@@ -212,7 +211,7 @@ def generate_daily_recap_html(data: dict) -> str:
   * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }}
   body {{ margin: 0; padding: 20px; background: #0f172a; display: flex; justify-content: center; }}
   .card-container {{
-    width: 1200px;
+    width: 1060px;
     background: #ffffff;
     border-radius: 18px;
     overflow: hidden;
@@ -434,15 +433,14 @@ def generate_daily_recap_html(data: dict) -> str:
     <table>
       <thead>
         <tr>
-          <th style="width: 40px;">STT</th>
-          <th style="width: 170px;">AM Quản Lý</th>
-          <th style="width: 100px;">M1: Đầu Ngày<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(08:00)</span></th>
-          <th style="width: 100px;">M2: TTS Ca 1<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(11:00)</span></th>
-          <th style="width: 100px;">M3: TTS Ca 2<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(16:00)</span></th>
-          <th style="width: 100px;">M4: LTC TTS<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(20:00)</span></th>
-          <th style="width: 100px;">M5: GTC &lt;50%<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(10:00)</span></th>
-          <th style="width: 110px;">Tổng Phạt</th>
-          <th>Chi Tiết Vi Phạm / Xin Phép</th>
+          <th style="width: 45px;">STT</th>
+          <th style="width: 200px;">AM Quản Lý</th>
+          <th style="width: 110px;">M1: Đầu Ngày<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(08:00)</span></th>
+          <th style="width: 110px;">M2: TTS Ca 1<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(11:00)</span></th>
+          <th style="width: 110px;">M3: TTS Ca 2<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(16:00)</span></th>
+          <th style="width: 110px;">M4: LTC TTS<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(20:00)</span></th>
+          <th style="width: 110px;">M5: GTC &lt;50%<br><span style="font-size: 10px; font-weight: normal; opacity: 0.8;">(10:00)</span></th>
+          <th style="width: 120px;">Tổng Phạt</th>
         </tr>
       </thead>
       <tbody>
@@ -467,7 +465,7 @@ def render_html_to_image(html_content: str, output_image_path: str = OUTPUT_PNG)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1260, "height": 900})
+        page = browser.new_page(viewport={"width": 1120, "height": 900})
         page.goto(f"file:///{os.path.abspath(OUTPUT_HTML)}")
         page.wait_for_timeout(300)
         card_el = page.locator(".card-container").first
