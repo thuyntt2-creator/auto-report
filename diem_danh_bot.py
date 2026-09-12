@@ -747,6 +747,71 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
     return "\n".join(lines)
 
 
+def generate_milestone_reminder(milestone_id: int, target_date: date = None):
+    """
+    Tạo tin nhắn nhắc nhở nộp bù sau giờ cut-off (sau 30 phút).
+    Chỉ gửi khi vẫn còn AM chưa nộp báo cáo. Nếu 100% đã nộp thì trả về None (không gửi).
+    """
+    if target_date is None:
+        target_date = get_vn_today()
+
+    try:
+        from sync_attendance_sheets import restore_db_from_sheet
+        restore_db_from_sheet(target_date)
+    except Exception:
+        pass
+
+    config = load_config()
+    ms_cfg = config["milestones"].get(str(milestone_id))
+    if not ms_cfg:
+        return None
+
+    ms_name = ms_cfg["name"]
+    cutoff = ms_cfg["cutoff"]
+    date_str = target_date.strftime("%Y-%m-%d")
+
+    active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    if milestone_id == 5:
+        m5_map = get_m5_required_ams()
+        if m5_map:
+            active_ams = [info['am'] for info in m5_map.values()]
+        else:
+            active_ams = []
+
+    with get_db() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+        SELECT am_id, status
+        FROM attendance_records
+        WHERE date = ? AND milestone_id = ?
+        """, (date_str, milestone_id))
+        records = {row["am_id"]: dict(row) for row in cur.fetchall()}
+
+    missing_list = []
+    for am in active_ams:
+        am_id = am["id"]
+        rec = records.get(am_id)
+        if not rec:
+            missing_list.append(am["display_name"])
+
+    if not missing_list:
+        return None  # 100% đã hoàn thành, không cần nhắc nhở
+
+    lines = [
+        f"🔔 <b>NHẮC NHỞ NỘP BÙ: MỐC {milestone_id} - {ms_name.upper()}</b>",
+        f"⏰ <i>Mốc cut-off: {cutoff} | Hiện tại vẫn còn <b>{len(missing_list)}/{len(active_ams)} AM</b> chưa nộp:</i>",
+        "──────────────────────────────"
+    ]
+    for idx, item in enumerate(missing_list, 1):
+        lines.append(f"  {idx}. {item}")
+
+    lines.append("")
+    lines.append("⚠️ <i>Lưu ý: Báo cáo nộp bây giờ đã tính Báo cáo trễ (Phạt 50.000đ). Nếu không nộp trong ngày sẽ tính Không nộp (Phạt 100.000đ).</i>")
+    lines.append("👉 <b>Nhờ các AM có tên khẩn trương nộp bù ngay!</b>")
+
+    return "\n".join(lines)
+
+
 def generate_daily_recap(target_date: date = None):
     if target_date is None:
         target_date = get_vn_today()
@@ -933,27 +998,38 @@ def start_scheduler():
             group_a = cfg_gtalk.get("channel_id_group_a", "2077278419534073856")
             group_b = cfg_gtalk.get("channel_id_group_b", "2095921878551764992")
 
-            # Danh sách mốc cần bắn recap theo từng Group
+            # Danh sách mốc cần bắn recap và nhắc nộp bù theo từng Group
             schedule_map = {
-                "08:00": (1, "Mốc 1 (Đầu ngày)", group_a),
-                "10:00": (5, "Mốc 5 (Điểm nóng)", group_b),
-                "11:00": (2, "Mốc 2 (Gán TTS Ca 1)", group_a),
-                "16:00": (3, "Mốc 3 (Gán TTS Ca 2)", group_a),
-                "20:00": (4, "Mốc 4 (LTC TTS)", group_a),
+                "08:00": (1, "Mốc 1 (Đầu ngày)", group_a, "recap"),
+                "08:30": (1, "Mốc 1 (Nhắc nộp bù)", group_a, "reminder"),
+                "10:00": (5, "Mốc 5 (Điểm nóng)", group_b, "recap"),
+                "10:30": (5, "Mốc 5 (Nhắc nộp bù)", group_b, "reminder"),
+                "11:00": (2, "Mốc 2 (Gán TTS Ca 1)", group_a, "recap"),
+                "11:30": (2, "Mốc 2 (Nhắc nộp bù)", group_a, "reminder"),
+                "16:00": (3, "Mốc 3 (Gán TTS Ca 2)", group_a, "recap"),
+                "16:30": (3, "Mốc 3 (Nhắc nộp bù)", group_a, "reminder"),
+                "20:00": (4, "Mốc 4 (LTC TTS)", group_a, "recap"),
             }
 
             if hm in schedule_map:
-                m_id, label, target_group = schedule_map[hm]
-                trigger_key = f"{today_str}_{m_id}"
+                m_id, label, target_group, action_type = schedule_map[hm]
+                trigger_key = f"{today_str}_{m_id}_{action_type}"
                 if trigger_key not in last_triggered:
                     last_triggered[trigger_key] = True
-                    print(f"\n[{now.strftime('%H:%M:%S')}] 🔔 Kích hoạt điểm danh cut-off {label} tại Group {target_group}!")
-                    msg = generate_milestone_recap(m_id)
-                    ok, err = send_gtalk_message(msg, channel_id=target_group)
-                    if ok:
-                        print(f"✅ Đã bắn điểm danh mốc {m_id} lên GTalk Group {target_group} thành công!")
+                    print(f"\n[{now.strftime('%H:%M:%S')}] 🔔 Kích hoạt {label} tại Group {target_group}!")
+                    if action_type == "recap":
+                        msg = generate_milestone_recap(m_id)
                     else:
-                        print(f"❌ Lỗi bắn GTalk: {err}")
+                        msg = generate_milestone_reminder(m_id)
+
+                    if msg:
+                        ok, err = send_gtalk_message(msg, channel_id=target_group)
+                        if ok:
+                            print(f"✅ Đã gửi {label} lên GTalk Group {target_group} thành công!")
+                        else:
+                            print(f"❌ Lỗi bắn GTalk: {err}")
+                    else:
+                        print(f"ℹ️ Không có AM nào thiếu báo cáo cho {label}, bỏ qua gửi tin.")
 
             # Chốt sổ cả ngày lúc 20:15
             if hm == "20:15":
