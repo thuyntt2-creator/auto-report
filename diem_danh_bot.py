@@ -226,7 +226,8 @@ class AttendanceParser:
         no_accent_txt = remove_accents(norm_txt)
 
         # Nếu gửi vào Group B (Group Báo cáo Điểm nóng) -> Mặc định là Mốc 5
-        group_b_id = str(self.config.get("channel_id_group_b", "2095921878551764992"))
+        gtalk_cfg = self.config.get("gtalk", {})
+        group_b_id = str(self.config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2095921878551764992")
         if channel_id and str(channel_id) == group_b_id:
             return 5, "BC Điểm nóng (GTC <50%)"
 
@@ -235,11 +236,10 @@ class AttendanceParser:
         m2_keywords = ["gán giaotts", "gan giaotts", "trước 9h", "truoc 9h", "trước 11h", "truoc 11h", "gán tts ca 1"]
         m3_keywords = ["trước: 16h", "trước 16h", "truoc 16h", "gán tts ca 2", "ca 2"]
         m5_keywords = [
-            "điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "gtc dưới 50",
+            "điểm nóng", "diem nong", "gtc <50%", "gtc < 50%", "gtc dưới 50", "gtc duoi 50", "dưới 50%", "duoi 50%",
             "xuất hàng xong", "xuat hang xong", "thời gian xuất hàng", "time xuất hàng",
-            "tồn / tổng", "tồn/tổng", "ton / tong", "ton/tong",
             "nhân viên đi làm", "nhan vien di lam", "nv đi làm", "nv di lam",
-            "bưu cục :", "bưu cục:"
+            "bưu cục :", "bưu cục:", "bưu cục (", "buu cuc (", "bưu cục -", "buu cuc -"
         ]
 
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m1_keywords):
@@ -250,7 +250,8 @@ class AttendanceParser:
             return 3, "Gán TTS ca 2"
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m2_keywords):
             return 2, "Gán TTS ca 1"
-        if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m5_keywords):
+
+        if re.search(r'tồn\s*/\s*tổng|ton\s*/\s*tong|tồn\s*:\s*\d+|ton\s*:\s*\d+', norm_txt) or any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m5_keywords):
             return 5, "BC Điểm nóng (GTC <50%)"
 
         if "gán tts" in norm_txt or "gan tts" in no_accent_txt:
@@ -502,13 +503,18 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     detected_am = parser.detect_am(raw_text, sender_name)
     m_id, m_name = parser.detect_report_type(raw_text, channel_id)
 
-    # Nếu là Mốc 5 hoặc gửi vào Group B: Quét tìm bưu cục trong tin nhắn
-    matched_hubs = []
-    group_b_id = str(config.get("channel_id_group_b", "2095921878551764992"))
+    # Nếu là Mốc 5 hoặc gửi vào Group B hoặc tìm thấy bưu cục điểm nóng:
+    matched_hubs = detect_hubs_in_text(raw_text)
+    gtalk_cfg = config.get("gtalk", {})
+    group_b_id = str(config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2095921878551764992")
+
+    if not m_id and matched_hubs:
+        m_id = 5
+        m_name = "BC Điểm nóng (GTC <50%)"
+
     if m_id == 5 or (channel_id and str(channel_id) == group_b_id):
         m_id = 5
         m_name = "BC Điểm nóng (GTC <50%)"
-        matched_hubs = detect_hubs_in_text(raw_text)
         # Báo cáo Mốc 5: Bưu cục thuộc quyền AM nào trong tab 'BC GTC dưới 50' thì ưu tiên AM đó
         if matched_hubs and matched_hubs[0].get("am"):
             detected_am = matched_hubs[0]["am"]
