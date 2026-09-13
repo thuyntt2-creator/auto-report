@@ -25,6 +25,14 @@ def build_daily_recap_data(target_date: date = None):
         
     date_str = target_date.strftime("%Y-%m-%d")
     date_display = target_date.strftime("%d/%m/%Y")
+
+    # Tự động đồng bộ từ Google Sheet về SQLite để dữ liệu luôn chính xác 100%
+    try:
+        from sync_attendance_sheets import restore_db_from_sheet
+        restore_db_from_sheet(target_date)
+    except Exception as e:
+        print(f"⚠️ restore_db_from_sheet error: {e}")
+
     config = load_config()
     active_ams = [am for am in config["ams"] if am.get("is_active", True)]
     

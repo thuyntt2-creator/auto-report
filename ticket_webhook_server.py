@@ -337,14 +337,24 @@ def trigger_cron_recap(m_id):
 @app.route("/cron/daily", methods=["GET", "POST"])
 def trigger_cron_daily():
     try:
-        from diem_danh_bot import generate_daily_recap, send_gtalk_message, load_config
-        cfg = load_config()
-        channel = cfg.get("gtalk", {}).get("channel_id_group_a")
-        msg = generate_daily_recap()
-        if msg:
-            ok, err = send_gtalk_message(msg, channel_id=channel)
-            return jsonify({"status": "ok", "sent": ok, "err": str(err)})
-        return jsonify({"status": "skipped", "reason": "empty message"})
+        sent_image = False
+        try:
+            from render_daily_recap_card import send_daily_attendance_recap_image
+            ok_img, err_img = send_daily_attendance_recap_image()
+            if ok_img:
+                sent_image = True
+        except Exception as e_img:
+            print(f"⚠️ Không render được ảnh cron daily: {e_img}")
+
+        if not sent_image:
+            from diem_danh_bot import generate_daily_recap, send_gtalk_message, load_config
+            cfg = load_config()
+            channel = cfg.get("gtalk", {}).get("channel_id_group_a")
+            msg = generate_daily_recap()
+            if msg:
+                ok, err = send_gtalk_message(msg, channel_id=channel)
+                return jsonify({"status": "ok", "sent_text": ok, "err": str(err)})
+        return jsonify({"status": "ok", "sent_image": sent_image})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
