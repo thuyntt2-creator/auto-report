@@ -240,7 +240,12 @@ class AttendanceParser:
             return 5, "BC Điểm nóng (GTC <50%)"
 
         m1_keywords = ["tổng hợp đầu ngày", "dau ngay", "gtc ngày n-1", "tỷ lệ gtc", "nvpttt"]
-        m4_keywords = ["ltc tts", "đơn ltc", "luân chuyển tts", "luan chuyen tts", "lc trước 23h"]
+        m4_keywords = [
+            "ltc tts", "đơn ltc", "luân chuyển tts", "luan chuyen tts",
+            "lc trước 23h", "lc truoc 23h", "lc được trước 23h", "lc duoc truoc 23h",
+            "không lc được", "khong lc duoc", "không lc trước", "khong lc truoc",
+            "không lc", "khong lc", "đơn tts không lc", "tts không lc", "tts khong lc"
+        ]
         m2_keywords = [
             "gán giaotts", "gan giaotts", "gán tts ca 1", "gan tts ca 1", "ca 1",
             "trước 9h", "truoc 9h", "trước 10h", "truoc 10h", "trước 11h", "truoc 11h",
@@ -261,6 +266,8 @@ class AttendanceParser:
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m1_keywords):
             return 1, "Tổng hợp đầu ngày"
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m4_keywords):
+            return 4, "LTC TTS"
+        if re.search(r'\blc\b.*?(?:23h|trước|truoc)', norm_txt) or re.search(r'\btts\b.*?\blc\b', norm_txt):
             return 4, "LTC TTS"
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m3_keywords):
             return 3, "Gán TTS ca 2"
