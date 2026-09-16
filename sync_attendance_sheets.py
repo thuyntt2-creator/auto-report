@@ -134,6 +134,13 @@ def restore_db_from_sheet(target_date: date = None):
                         VALUES (?, ?, ?, ?, 'Có xin phép', ?, CURRENT_TIMESTAMP)
                         """, (date_str, am_id, am_name, m_id, val))
                         continue
+                    elif '🛡️' in val or 'Miễn' in val or 'miễn' in val:
+                        status = 'EXEMPT'
+                        pen = 0
+                        cur.execute("""
+                        INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at, excuse_type)
+                        VALUES (?, ?, ?, ?, 'Miễn nộp', ?, CURRENT_TIMESTAMP, 'EXEMPTION')
+                        """, (date_str, am_id, am_name, m_id, val))
                     elif '🚫' in val:
                         status = 'INVALID'
                         pen = config['fines']['invalid']
@@ -310,23 +317,32 @@ def sync_daily_to_sheet(target_date: date = None):
 
         # Mốc 5
         rec_m5 = records.get((am_id, 5))
+        excuse_m5 = next((e for e in am_excuses if e.get("milestone_id") == 5 or e.get("milestone_id") is None), None)
+        is_m5_exempt = (excuse_m5 and excuse_m5.get("excuse_type") == "EXEMPTION") or (rec_m5 and rec_m5.get("status") == "EXEMPT")
         old_val_m5 = ""
         if row_key in existing_rows:
             old_row_data = all_values[existing_rows[row_key] - 1]
             if len(old_row_data) > 7:
                 old_val_m5 = old_row_data[7].strip()
 
-        if rec_m5:
-            if rec_m5["status"] == "LATE":
-                if am_excuses or "Đã xin" in old_val_m5:
+        if is_m5_exempt or old_val_m5.startswith("🛡️") or "Miễn" in old_val_m5:
+            m_texts.append("🛡️ Miễn nộp (0đ)")
+        elif rec_m5:
+            if rec_m5["status"] == "EXEMPT":
+                m_texts.append("🛡️ Miễn nộp (0đ)")
+            elif rec_m5["status"] == "LATE":
+                if excuse_m5 or am_excuses or "Đã xin" in old_val_m5:
                     m_texts.append(f"⚠️ Trễ (Đã xin - 0đ)")
                 else:
                     fine_late += rec_m5.get("penalty_amount", 50000)
                     count_late += 1
                     m_texts.append(f"⚠️ Trễ ({rec_m5['submit_time']})")
             elif rec_m5["status"] == "INVALID":
-                fine_late += config["fines"]["invalid"]
-                m_texts.append("🚫 Sai định dạng")
+                if excuse_m5 or am_excuses:
+                    m_texts.append("🛡️ Miễn nộp (0đ)")
+                else:
+                    fine_late += config["fines"]["invalid"]
+                    m_texts.append("🚫 Sai định dạng")
             else:
                 m_texts.append(f"✅ {rec_m5['submit_time']}")
         else:
@@ -337,6 +353,8 @@ def sync_daily_to_sheet(target_date: date = None):
                 if "0đ" not in old_val_m5 and "Đã xin" not in old_val_m5:
                     fine_late += config["fines"]["late"]
                     count_late += 1
+            elif excuse_m5 or old_val_m5.startswith("⏳"):
+                m_texts.append("⏳ Có xin phép")
             else:
                 if am_id in m5_required_map:
                     count_missing += 1

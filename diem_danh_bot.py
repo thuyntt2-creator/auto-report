@@ -373,9 +373,9 @@ def detect_hubs_in_text(text: str):
         return []
 
 # ─── TÍNH PHẠT & GHI NHẬN ─────────────────────────────────────
-def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = None):
+def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = None, channel_id: str = None):
     """
-    Tự động phát hiện khi AM nhắn tin xin phép báo cáo trễ / xin off phép.
+    Tự động phát hiện khi AM nhắn tin xin phép báo cáo trễ / xin off phép / xin miễn báo cáo.
     Bảo đảm không nhận diện nhầm khi AM gửi báo cáo nghiệp vụ (chứa ghi chú nhân sự nghỉ).
     """
     if dt is None:
@@ -401,13 +401,20 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         r'(?:am|kv|em|mình|tôi)?\s*xin\s+trễ',
         r'báo\s+cáo\s+trễ',
         r'xin\s+nộp\s+trễ',
-        r'(?:am|kv|em|mình|tôi)?\s*xin\s+(?:phép\s+)?(?:miễn|khong|không|ko|k)\s+(?:báo\s+cáo|bc|nộp)',
-        r'\bmiễn\s+(?:báo\s+cáo|bc|nộp)\b',
-        r'\b(?:không|khong|ko)\s+(?:báo\s+cáo|bc|nộp)\b',
-        r'xin\s+miễn',
+        r'(?:am|kv|em|mình|tôi)?\s*xin\s+(?:phép\s+)?(?:miễn|khong|không|ko|k|loại\s+trừ|loai\s+tru)\s+(?:báo\s+cáo|bc|nộp)',
+        r'\b(?:miễn|loại\s+trừ|loai\s+tru)\s+(?:báo\s+cáo|bc|nộp)\b',
+        r'\b(?:không|khong|ko|k)\s+(?:báo\s+cáo|bc|nộp|làm\s+được|lam\s+duoc)\b',
+        r'xin\s+(?:miễn|loại\s+trừ|loai\s+tru)',
         r'xin\s+không\s+nộp',
         r'xin\s+không\s+báo\s+cáo',
         r'xin\s+khong\s+bao\s+cao',
+        r'xin\s+k\s+báo\s+cáo',
+        r'xin\s+k\s+bc',
+        r'không\s+báo\s+cáo\s+được',
+        r'khong\s+bao\s+cao\s+duoc',
+        r'chưa\s+báo\s+cáo\s+được',
+        r'chua\s+bao\s+cao\s+duoc',
+        r'xin\s+(?:phép\s+)?(?:đi\s+tuyến|di\s+tuyen)',
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?off',
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?nghỉ',
         r'\bnghỉ\s+phép\b',
@@ -426,6 +433,10 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     if not detected_am:
         return None
 
+    gtalk_cfg = config.get("gtalk", {})
+    group_b_id = str(config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2097270568973508608")
+    is_group_b = channel_id and str(channel_id) == group_b_id
+
     # 3. Xác định phạm vi mốc với ranh giới từ chính xác (tránh >120H nhầm 20h)
     if any(k in norm_txt for k in ["cả ngày", "ca ngay", "nguyên ngày", "hôm nay off", "hom nay off"]):
         milestones = [1, 5, 2, 3, 4]
@@ -439,7 +450,7 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         milestones = [3]
         scope_label = "Mốc 3 (Gán TTS Ca 2 16h00)"
         next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
-    elif re.search(r'\b(?:mốc\s*5|moc\s*5|điểm\s*nóng|diem\s*nong)\b', norm_txt):
+    elif re.search(r'\b(?:mốc\s*5|moc\s*5|điểm\s*nóng|diem\s*nong)\b', norm_txt) or is_group_b:
         milestones = [5]
         scope_label = "Mốc 5 (BC Điểm nóng 10h00)"
         next_reminder = "Các mốc khác vẫn báo cáo đúng timeline quy định nhé!"
@@ -489,7 +500,8 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     is_exemption = any(k in norm_txt for k in [
         "miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao",
         "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc", "cả ngày", "ca ngay",
-        "nguyên ngày", "off", "nghỉ", "nghi"
+        "nguyên ngày", "off", "nghỉ", "nghi", "loại trừ", "loai tru", "không làm được",
+        "khong lam duoc", "k làm được", "k lam duoc", "đi tuyến", "di tuyen"
     ])
     excuse_type = "EXEMPTION" if is_exemption else "LATE_PERMIT"
 
@@ -504,6 +516,16 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
                 today_str, detected_am["id"], detected_am["full_name"], m_id,
                 reason, raw_text, dt.strftime("%Y-%m-%d %H:%M:%S"), excuse_type
             ))
+            if is_exemption:
+                cur.execute("""
+                INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'EXEMPT', 0, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                    status = 'EXEMPT',
+                    late_minutes = 0,
+                    penalty_amount = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                """, (today_str, detected_am["id"], detected_am["full_name"], m_id, dt.strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
 
     if is_exemption:
@@ -588,6 +610,10 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
 def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, submit_time=None):
     if submit_time is None:
         submit_time = get_vn_now()
+
+    # BẢO VỆ TUYỆT ĐỐI: Nếu là tin nhắn xin phép / miễn nộp / off phép -> Bỏ qua để detect_excuse_request xử lý!
+    if detect_excuse_request(raw_text, sender_name, submit_time, channel_id):
+        return None, "Tin nhắn xin phép / miễn nộp"
 
     config = load_config()
     parser = AttendanceParser(config)
