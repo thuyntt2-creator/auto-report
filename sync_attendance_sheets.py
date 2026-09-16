@@ -302,6 +302,8 @@ def sync_daily_to_sheet(target_date: date = None):
                     m_texts.append("❌ Chưa nộp (100k)")
             elif rec["status"] == "ON_TIME":
                 m_texts.append(f"✅ {rec['submit_time']}")
+            elif rec["status"] == "EXEMPT":
+                m_texts.append("🛡️ Miễn nộp (0đ)")
             elif rec["status"] == "LATE":
                 if excuse_m or am_excuses or "Đã xin" in old_val:
                     # Đã có xin phép trễ -> TỰ ĐỘNG MIỄN PHẠT 50K (Tính 0đ)!

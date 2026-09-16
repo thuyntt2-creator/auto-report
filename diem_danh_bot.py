@@ -425,7 +425,9 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?off',
         r'(?:am|kv|em|mình|tôi)\s+xin\s+(?:phép\s+)?nghỉ',
         r'\bnghỉ\s+phép\b',
-        r'\boff\s+phép\b'
+        r'\boff\s+phép\b',
+        r'(?:khoa|khoá)\s+(?:id|acc|tai\s*khoan|tài\s*khoản|user).*(?:xin|khong|không|ko|k|chua|chưa|miễn|loại)',
+        r'(?:ban\s*giao|bàn\s*giao).*(?:xin|khong|không|ko|k|chua|chưa|miễn|loại)'
     ]
 
     is_excuse = any(re.search(p, norm_txt) or re.search(remove_accents(p), no_accent_txt) for p in excuse_patterns)
@@ -444,43 +446,83 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     group_b_id = str(config.get("channel_id_group_b") or gtalk_cfg.get("channel_id_group_b") or "2097270568973508608")
     is_group_b = channel_id and str(channel_id) == group_b_id
 
-    # 3. Xác định phạm vi mốc với ranh giới từ chính xác (tránh >120H nhầm 20h)
-    if any(k in norm_txt for k in ["cả ngày", "ca ngay", "nguyên ngày", "hôm nay off", "hom nay off"]):
+    # ─── 3. KIỂM TRA TRƯỜNG HỢP ĐẶC BIỆT (ƯU TIÊN CAO NHẤT) ───
+    is_id_locked = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in [
+        "khoa id", "khoá id", "bi khoa id", "bị khoá id", "khoa acc", "khoá acc",
+        "khoa tai khoan", "khoá tài khoản", "khoa user", "khoá user", "chua mo id", "chưa mở id"
+    ])
+    is_handover = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in [
+        "ban giao", "bàn giao", "chua co du lieu", "chưa có dữ liệu",
+        "chua xem duoc", "chưa xem được", "chua coi duoc", "chưa coi được",
+        "chua cap quyen", "chưa cấp quyền"
+    ])
+
+    if is_id_locked:
+        milestones = [1, 5, 2, 3, 4]
+        scope_label = "Cả ngày (5 Mốc - Khóa ID hệ thống)"
+        next_reminder = "Chúc AM sớm mở lại tài khoản để tiếp tục công việc nhé!"
+        reason = "Bị khóa ID / Tài khoản hệ thống"
+        is_exemption = True
+    elif is_handover:
+        milestones = [5]
+        scope_label = "Mốc 5 (BC Điểm nóng 10h00 - Đang bàn giao bưu cục)"
+        next_reminder = "Các mốc vận hành chung khác (1, 2, 3, 4) vẫn báo cáo đúng timeline quy định nhé!"
+        reason = "Đang bàn giao bưu cục / Chưa có dữ liệu"
+        is_exemption = True
+    elif any(k in norm_txt for k in ["cả ngày", "ca ngay", "nguyên ngày", "hôm nay off", "hom nay off"]):
         milestones = [1, 5, 2, 3, 4]
         scope_label = "Cả ngày (Tất cả các mốc)"
         next_reminder = "Chúc AM nghỉ ngơi / công tác tốt nhé!"
+        reason = "Nghỉ phép cả ngày"
+        is_exemption = True
     elif re.search(r'\b(?:mốc\s*2|moc\s*2|ca\s*1)\b', norm_txt):
         milestones = [2]
         scope_label = "Mốc 2 (Gán TTS Ca 1 11h00)"
         next_reminder = "Các mốc khác vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:mốc\s*3|moc\s*3|ca\s*2)\b', norm_txt):
         milestones = [3]
         scope_label = "Mốc 3 (Gán TTS Ca 2 16h00)"
         next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:mốc\s*5|moc\s*5|điểm\s*nóng|diem\s*nong)\b', norm_txt) or is_group_b:
         milestones = [5]
         scope_label = "Mốc 5 (BC Điểm nóng 10h00)"
         next_reminder = "Các mốc khác vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:mốc\s*1|moc\s*1|đầu\s*ngày|dau\s*ngay)\b', norm_txt):
         milestones = [1]
         scope_label = "Mốc 1 (Tổng hợp đầu ngày 08h00)"
         next_reminder = "Các mốc tiếp theo vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:mốc\s*4|moc\s*4|ltc|luân\s*chuyển)\b', norm_txt):
         milestones = [4]
         scope_label = "Mốc 4 (LTC TTS 20h00)"
         next_reminder = "Nhờ AM lưu ý các ca tiếp theo nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:chiều|chieu|16h(?:00)?)\b', norm_txt):
         milestones = [3]
         scope_label = "Ca chiều (Mốc 3 - Gán TTS Ca 2 16h00)"
         next_reminder = "Mốc tối (20h00 - LTC TTS) vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:ca\s*tối|ca\s*toi|20h(?:00)?)\b', norm_txt):
         milestones = [4]
         scope_label = "Ca tối (Mốc 4 - LTC TTS 20h00)"
         next_reminder = "Nhờ AM nộp bù trước khi kết thúc ca làm việc nhé!"
+        reason = None
+        is_exemption = False
     elif re.search(r'\b(?:sáng|sang|11h(?:00)?|9h(?:00)?)\b', norm_txt):
         milestones = [1, 5, 2]
         scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
         next_reminder = "Ca chiều (16h00) và Ca tối (20h00) vẫn báo cáo đúng timeline quy định nhé!"
+        reason = None
+        is_exemption = False
     else:
         cur_hour = dt.hour
         if cur_hour < 12:
@@ -495,22 +537,26 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
             milestones = [4]
             scope_label = "Ca tối (Mốc 4 - LTC TTS 20h00)"
             next_reminder = "Nhờ AM nộp bù trước khi hết ca nhé!"
+        reason = None
+        is_exemption = False
 
-    reason = "Bận việc đột xuất / Đi tuyến"
-    for cue in ["lý do", "ly do", "chưa vô được", "chưa vào được", "vì", "vi", "hẹn", "hen", "gặp", "gap", "bận", "ban", "đi tuyến", "di tuyen", "do"]:
-        if f" {cue} " in f" {norm_txt} ":
-            idx = norm_txt.find(cue)
-            reason_part = raw_text[idx + len(cue):].strip().lstrip(":").strip()
-            if reason_part:
-                reason = reason_part[:50].split("\n")[0].strip()
-            break
+    if reason is None:
+        reason = "Bận việc đột xuất / Đi tuyến"
+        for cue in ["lý do", "ly do", "chưa vô được", "chưa vào được", "vì", "vi", "hẹn", "hen", "gặp", "gap", "bận", "ban", "đi tuyến", "di tuyen", "do"]:
+            if f" {cue} " in f" {norm_txt} ":
+                idx = norm_txt.find(cue)
+                reason_part = raw_text[idx + len(cue):].strip().lstrip(":").strip()
+                if reason_part:
+                    reason = reason_part[:50].split("\n")[0].strip()
+                break
 
-    is_exemption = any(k in norm_txt for k in [
-        "miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao",
-        "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc", "cả ngày", "ca ngay",
-        "nguyên ngày", "off", "nghỉ", "nghi", "loại trừ", "loai tru", "không làm được",
-        "khong lam duoc", "k làm được", "k lam duoc", "đi tuyến", "di tuyen"
-    ])
+    if not is_exemption:
+        is_exemption = any(k in norm_txt for k in [
+            "miễn", "mien", "không báo cáo", "khong bao cao", "ko báo cáo", "ko bao cao",
+            "không nộp", "khong nop", "k nộp", "k báo cáo", "k bc", "cả ngày", "ca ngay",
+            "nguyên ngày", "off", "nghỉ", "nghi", "loại trừ", "loai tru", "không làm được",
+            "khong lam duoc", "k làm được", "k lam duoc", "đi tuyến", "di tuyen"
+        ])
     excuse_type = "EXEMPTION" if is_exemption else "LATE_PERMIT"
 
     today_str = dt.strftime("%Y-%m-%d")
