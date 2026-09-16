@@ -102,6 +102,8 @@ def restore_db_from_sheet(target_date: date = None):
         import re
         with get_db() as conn:
             cur = conn.cursor()
+            cur.execute("DELETE FROM attendance_records WHERE date = ?", (date_str,))
+            cur.execute("DELETE FROM excuses WHERE date = ?", (date_str,))
             for row in rows[1:]:
                 if len(row) < 8 or row[0].strip() != date_display:
                     continue
@@ -487,9 +489,11 @@ def get_admin_excused_ams(target_date: date = None):
         if len(row) >= 15:
             r_date = row[0].strip()
             r_emp_id = row[1].strip()
-            # Cột O là index 14
+            # Cột O là index 14 (Checkbox Nghỉ phép / Miễn phạt)
             is_checked = str(row[14]).strip().upper() == "TRUE"
-            if r_date == date_display and is_checked:
+            # Cột Q là index 16 (Trạng thái thu tiền: 'Miễn phạt')
+            is_exempt_col_q = len(row) >= 17 and row[16].strip().lower() == "miễn phạt"
+            if r_date == date_display and (is_checked or is_exempt_col_q):
                 excused_emp_ids.add(r_emp_id)
 
     return excused_emp_ids
