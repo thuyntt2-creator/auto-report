@@ -146,6 +146,13 @@ class AttendanceParser:
         norm_sender = normalize_text(sender_name)
         no_acc_sender = remove_accents(norm_sender)
 
+        # ── LOẠI TRỪ ADMIN / QUẢN LÝ / TRỢ LÝ (Không phải AM báo cáo) ──
+        EXCLUDED_SENDERS = [
+            "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin"
+        ]
+        if any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_SENDERS):
+            return None
+
         # ── TIER 1: Header / Khai báo trực tiếp (Ưu tiên số 1) ──
         # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB'
         header_m = re.search(r'(?:khu\s+vực\s+|kv\s+)?am\s*[:\-\s]\s*([^\n\r,\:\;]+)', norm_txt)
@@ -632,6 +639,15 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         m_name = "BC Điểm nóng (GTC <50%)"
 
     if m_id == 5 or (channel_id and str(channel_id) == group_b_id):
+        # BẢO VỆ CHỐNG BẮT NHẦM CHAT THƯỜNG TRONG GROUP B:
+        # Chỉ xử lý là báo cáo Mốc 5 nếu:
+        # 1. Có bưu cục điểm nóng khớp trong tin nhắn (matched_hubs)
+        # 2. HOẶC tin nhắn có từ khóa / cấu trúc số liệu báo cáo rõ ràng
+        report_cues = ["tồn", "ton", "nvpttt", "xuất hàng", "xuat hang", "điểm nóng", "diem nong", "gtc", "báo cáo", "bao cao", "bưu cục", "buu cuc", "bc "]
+        has_report_struct = any(k in raw_text.lower() for k in report_cues)
+        if not matched_hubs and not has_report_struct:
+            return None, "Chat thông thường trong Group B (không phải báo cáo Mốc 5)"
+
         m_id = 5
         m_name = "BC Điểm nóng (GTC <50%)"
         # Báo cáo Mốc 5: Bưu cục thuộc quyền AM nào trong tab 'BC GTC dưới 50' thì ưu tiên AM đó

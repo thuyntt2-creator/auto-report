@@ -374,6 +374,22 @@ def admin_fix_vu():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/admin/fix_thuy", methods=["GET", "POST"])
+def admin_fix_thuy():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM attendance_records WHERE date = ? AND am_id = 'am_thuy_ctt' AND milestone_id = 5", (today_str,))
+            cur.execute("DELETE FROM raw_messages WHERE detected_am_id = 'am_thuy_ctt' AND detected_milestone = 5 AND DATE(received_at) = ?", (today_str,))
+            conn.commit()
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Cleared am_thuy_ctt M5 record and synced sheet"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/cron/recap/<int:m_id>", methods=["GET", "POST"])
 def trigger_cron_recap(m_id):
     try:
