@@ -592,10 +592,10 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
 
     if is_exemption:
         action_title = "XÁC NHẬN GHI NHẬN MIỄN BÁO CÁO"
-        action_note = "Đã ghi nhận miễn báo cáo mốc này (0đ phạt)."
+        action_note = "Đã ghi nhận miễn báo cáo mốc này (0đ phạt, không cần nộp bù)."
     else:
         action_title = "XÁC NHẬN GHI NHẬN XIN PHÉP BÁO CÁO TRỄ"
-        action_note = "Nhờ AM nộp bù đúng hạn quy định để được tính Hợp lệ (0đ)."
+        action_note = "Nhờ AM nộp bù trong vòng 30 phút. Nếu nhắm trễ trên 30 phút, AM vui lòng nhắn xin miễn báo cáo mốc này để tránh sai lệch dữ liệu gán ca nhé!"
 
     reply_msg = (
         f"📝 <b>{action_title}</b>\n"
