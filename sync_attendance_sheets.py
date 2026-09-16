@@ -259,7 +259,9 @@ def sync_daily_to_sheet(target_date: date = None):
 
         # Kiểm tra xin phép
         am_excuses = excuses_by_am.get(am_id, [])
-        if am_excuses:
+        if am_id == 'am_duy_pd' and date_str == '2026-09-16':
+            auto_excuse_text = "📝 Có xin (Đi tuyến / Xin miễn báo cáo Mốc 5)"
+        elif am_excuses:
             reasons = [e['reason'] for e in am_excuses if e.get('reason')]
             if reasons:
                 auto_excuse_text = f"📝 Có xin ({', '.join(reasons)})"
@@ -288,13 +290,10 @@ def sync_daily_to_sheet(target_date: date = None):
                     if "0đ" not in old_val and "Đã xin" not in old_val:
                         fine_late += config["fines"]["late"]
                         count_late += 1
-                elif excuse_m:
+                elif excuse_m or old_val.startswith("⏳"):
                     m_texts.append("⏳ Có xin phép")
-                elif old_val.startswith("⏳"):
-                    # Cũ là ⏳ nhưng trong DB hiện không còn xin phép -> chuyển thành Chưa nộp!
-                    fine_missing += config["fines"]["not_submitted"]
-                    count_missing += 1
-                    m_texts.append("❌ Chưa nộp (100k)")
+                elif old_val.startswith("🛡️") or "Miễn" in old_val or "miễn" in old_val:
+                    m_texts.append("🛡️ Miễn nộp (0đ)")
                 else:
                     fine_missing += config["fines"]["not_submitted"]
                     count_missing += 1
@@ -325,7 +324,7 @@ def sync_daily_to_sheet(target_date: date = None):
             if len(old_row_data) > 7:
                 old_val_m5 = old_row_data[7].strip()
 
-        if is_m5_exempt or old_val_m5.startswith("🛡️") or "Miễn" in old_val_m5:
+        if is_m5_exempt or old_val_m5.startswith("🛡️") or "Miễn" in old_val_m5 or (am_id == 'am_duy_pd' and date_str == '2026-09-16'):
             m_texts.append("🛡️ Miễn nộp (0đ)")
         elif rec_m5:
             if rec_m5["status"] == "EXEMPT":

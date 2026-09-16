@@ -320,6 +320,33 @@ def debug_recent():
 def health_check():
     return jsonify({"status": "ok", "time": get_vn_now().strftime("%Y-%m-%d %H:%M:%S")})
 
+@app.route("/admin/fix_duy", methods=["GET", "POST"])
+def admin_fix_duy():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at, excuse_type)
+            VALUES (?, 'am_duy_pd', 'Phan Đình Duy', 5, 'Đi tuyến / Miễn báo cáo Mốc 5', 'Xin miễn mốc 5', CURRENT_TIMESTAMP, 'EXEMPTION')
+            """, (today_str,))
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_duy_pd', 'Phan Đình Duy', 5, CURRENT_TIMESTAMP, 'EXEMPT', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                status = 'EXEMPT',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str,))
+            conn.commit()
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Updated AM Duy exemption in SQLite and synced to Google Sheet"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/cron/recap/<int:m_id>", methods=["GET", "POST"])
 def trigger_cron_recap(m_id):
     try:
