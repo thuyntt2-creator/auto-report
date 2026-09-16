@@ -359,6 +359,14 @@ def detect_hubs_in_text(text: str):
         matched = []
         for r in rows[1:]:
             if len(r) >= 2 and r[0] and r[1]:
+                # Bỏ qua bưu cục đang bàn giao / miễn trừ
+                full_row_text = " ".join(r).lower()
+                no_acc_row = remove_accents(full_row_text)
+                if any(kw in full_row_text or kw in no_acc_row for kw in [
+                    "ban giao", "bàn giao", "chuyen giao", "chuyển giao", "mien", "miễn", "loai tru", "loại trừ"
+                ]):
+                    continue
+
                 raw_hub = r[0].strip()
                 am_str = r[1].strip()
                 variants = generate_hub_variants(raw_hub)
@@ -865,6 +873,14 @@ def get_m5_required_ams():
         am_hubs_map = {}
         for r in rows[1:]:
             if len(r) >= 2 and r[0] and r[1]:
+                # TỰ ĐỘNG BỎ QUA BƯU CỤC ĐANG BÀN GIAO / MIỄN BÁO CÁO (PHƯƠNG ÁN B - CÁCH 1)
+                full_row_text = " ".join(r).lower()
+                no_acc_row = remove_accents(full_row_text)
+                if any(kw in full_row_text or kw in no_acc_row for kw in [
+                    "ban giao", "bàn giao", "chuyen giao", "chuyển giao", "mien", "miễn", "loai tru", "loại trừ"
+                ]):
+                    continue
+
                 hub = r[0].strip()
                 am_str = r[1].strip()
                 matched_am = parser.detect_am(am_str, am_str)
