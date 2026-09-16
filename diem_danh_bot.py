@@ -490,11 +490,12 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
             next_reminder = "Nhờ AM nộp bù trước khi hết ca nhé!"
 
     reason = "Bận việc đột xuất / Đi tuyến"
-    for cue in ["do", "vì", "vi", "hẹn", "hen", "gặp", "gap", "bận", "ban", "đi", "di"]:
+    for cue in ["lý do", "ly do", "chưa vô được", "chưa vào được", "vì", "vi", "hẹn", "hen", "gặp", "gap", "bận", "ban", "đi tuyến", "di tuyen", "do"]:
         if f" {cue} " in f" {norm_txt} ":
             idx = norm_txt.find(cue)
-            reason_part = raw_text[idx:].strip()
-            reason = reason_part[:50].split("\n")[0].strip()
+            reason_part = raw_text[idx + len(cue):].strip().lstrip(":").strip()
+            if reason_part:
+                reason = reason_part[:50].split("\n")[0].strip()
             break
 
     is_exemption = any(k in norm_txt for k in [
