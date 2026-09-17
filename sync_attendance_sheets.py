@@ -305,7 +305,7 @@ def sync_daily_to_sheet(target_date: date = None):
             elif rec["status"] == "EXEMPT":
                 m_texts.append("🛡️ Miễn nộp (0đ)")
             elif rec["status"] == "LATE":
-                if excuse_m or am_excuses or "Đã xin" in old_val:
+                if excuse_m:
                     # Đã có xin phép trễ -> TỰ ĐỘNG MIỄN PHẠT 50K (Tính 0đ)!
                     m_texts.append(f"⚠️ Trễ {rec['late_minutes']}p (Đã xin - 0đ)")
                 else:
@@ -328,26 +328,32 @@ def sync_daily_to_sheet(target_date: date = None):
             if len(old_row_data) > 7:
                 old_val_m5 = old_row_data[7].strip()
 
-        if is_m5_exempt or old_val_m5.startswith("🛡️") or "Miễn" in old_val_m5 or (am_id == 'am_duy_pd' and date_str == '2026-09-16'):
-            m_texts.append("🛡️ Miễn nộp (0đ)")
+        # NGUYÊN TẮC VÀNG: Nếu AM không có bưu cục nóng bắt buộc trong tab 'BC GTC dưới 50'
+        # -> Luôn hiển thị '— (Không có BC <50%)', không bao giờ gán Miễn nộp hay Chưa nộp!
+        if am_id not in m5_required_map:
+            m_texts.append("— (Không có BC <50%)")
         elif rec_m5:
             if rec_m5["status"] == "EXEMPT":
                 m_texts.append("🛡️ Miễn nộp (0đ)")
             elif rec_m5["status"] == "LATE":
-                if excuse_m5 or am_excuses or "Đã xin" in old_val_m5:
+                if excuse_m5:
                     m_texts.append(f"⚠️ Trễ (Đã xin - 0đ)")
                 else:
                     fine_late += rec_m5.get("penalty_amount", 50000)
                     count_late += 1
                     m_texts.append(f"⚠️ Trễ ({rec_m5['submit_time']})")
             elif rec_m5["status"] == "INVALID":
-                if excuse_m5 or am_excuses:
+                if excuse_m5:
                     m_texts.append("🛡️ Miễn nộp (0đ)")
                 else:
                     fine_late += config["fines"]["invalid"]
                     m_texts.append("🚫 Sai định dạng")
             else:
                 m_texts.append(f"✅ {rec_m5['submit_time']}")
+        elif is_m5_exempt:
+            m_texts.append("🛡️ Miễn nộp (0đ)")
+        elif excuse_m5:
+            m_texts.append("⏳ Có xin phép")
         else:
             if old_val_m5.startswith("✅"):
                 m_texts.append(old_val_m5)
@@ -356,15 +362,12 @@ def sync_daily_to_sheet(target_date: date = None):
                 if "0đ" not in old_val_m5 and "Đã xin" not in old_val_m5:
                     fine_late += config["fines"]["late"]
                     count_late += 1
-            elif excuse_m5 or old_val_m5.startswith("⏳"):
+            elif old_val_m5.startswith("⏳"):
                 m_texts.append("⏳ Có xin phép")
             else:
-                if am_id in m5_required_map:
-                    count_missing += 1
-                    fine_missing += config["fines"]["not_submitted"]
-                    m_texts.append("❌ Chưa nộp (100k)")
-                else:
-                    m_texts.append("— (Không có BC <50%)")
+                count_missing += 1
+                fine_missing += config["fines"]["not_submitted"]
+                m_texts.append("❌ Chưa nộp (100k)")
 
         am_fine_total = fine_late + fine_missing
 
