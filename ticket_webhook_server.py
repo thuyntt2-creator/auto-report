@@ -374,6 +374,46 @@ def admin_fix_vu():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/admin/fix_vu_m2", methods=["GET", "POST"])
+def admin_fix_vu_m2():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet, get_sheet_client, SPREADSHEET_ID, SHEET_TITLE
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_vu_nln', 'Nguyễn Lê Nguyên Vũ', 2, '2026-09-17 11:00:27', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = '2026-09-17 11:00:27',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str,))
+            cur.execute("""
+            DELETE FROM attendance_records
+            WHERE date = ? AND am_id = 'am_vu_nln' AND milestone_id = 3
+            """, (today_str,))
+            conn.commit()
+        try:
+            gc = get_sheet_client()
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet(SHEET_TITLE)
+            cells = ws.findall("Nguyễn Lê Nguyên Vũ")
+            for cell in cells:
+                row_vals = ws.row_values(cell.row)
+                if len(row_vals) > 0 and "17/09/2026" in row_vals[0]:
+                    ws.update_cell(cell.row, 6, "❌ Chưa nộp (100k)")
+                    break
+        except Exception as e_sheet:
+            print(f"Sheet cell reset error: {e_sheet}")
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Updated AM Vu M2 ON_TIME and removed M3 in SQLite and Google Sheet"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/fix_thuy", methods=["GET", "POST"])
 def admin_fix_thuy():
     try:

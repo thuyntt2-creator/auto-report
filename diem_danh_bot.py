@@ -279,24 +279,43 @@ class AttendanceParser:
             return 4, "LTC TTS"
         if re.search(r'\blc\b.*?(?:23h|trước|truoc)', norm_txt) or re.search(r'\btts\b.*?\blc\b', norm_txt):
             return 4, "LTC TTS"
-        if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m3_keywords):
-            return 3, "Gán TTS ca 2"
-        if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m2_keywords):
-            return 2, "Gán TTS ca 1"
+        has_m2 = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m2_keywords) or bool(re.search(r'\b(?:trước\s*)?(?:9h|10h|11h)\b', norm_txt))
+        has_m3 = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m3_keywords) or bool(re.search(r'\b(?:trước\s*)?(?:15h|16h)\b', norm_txt))
 
-        if re.search(r'\b(?:trước\s*)?(?:15h|16h)\b', norm_txt):
-            return 3, "Gán TTS ca 2"
-        if re.search(r'\b(?:trước\s*)?(?:9h|10h|11h)\b', norm_txt):
-            return 2, "Gán TTS ca 1"
+        # Nếu có từ khóa của cả Ca 1 và Ca 2 (ví dụ AM copy nhầm mẫu có dòng 'trước 16h' vào báo cáo ca 1 'trước 11h')
+        if has_m2 and has_m3:
+            if submit_time.hour < 13:
+                return 2, "Gán TTS ca 1"
+            else:
+                return 3, "Gán TTS ca 2"
+
+        # Nếu gửi buổi sáng (< 13:00): Ưu tiên Ca 1 (Mốc 2, cut-off 11:00)
+        if submit_time.hour < 13:
+            if has_m2:
+                return 2, "Gán TTS ca 1"
+            if has_m3:
+                return 3, "Gán TTS ca 2"
+        else:
+            # Nếu gửi buổi chiều (>= 13:00): Ưu tiên Ca 2 (Mốc 3, cut-off 16:00)
+            if has_m3:
+                return 3, "Gán TTS ca 2"
+            if has_m2:
+                return 2, "Gán TTS ca 1"
 
         if re.search(r'tồn\s*/\s*tổng|ton\s*/\s*tong|tồn\s*:\s*\d+|ton\s*:\s*\d+', norm_txt) or any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m5_keywords):
             return 5, "BC Điểm nóng (GTC <50%)"
 
         if "gán tts" in norm_txt or "gan tts" in no_accent_txt:
-            # Nếu có từ khóa buổi chiều hoặc gửi sau 13:00 -> Ca 2 (cut-off 16:00), ngược lại -> Ca 1 (cut-off 11:00)
-            if any(k in norm_txt for k in ["ca 2", "15h", "16h", "chiều", "chieu"]) or submit_time.hour >= 13:
+            # Nếu gửi buổi sáng (< 13h) -> Mặc định là Ca 1 trừ khi chỉ định rõ ràng ca 2 / 16h
+            if submit_time.hour < 13:
+                if any(k in norm_txt for k in ["ca 2", "15h", "16h", "chiều", "chieu"]):
+                    return 3, "Gán TTS ca 2"
+                return 2, "Gán TTS ca 1"
+            else:
+                # Gửi buổi chiều (>= 13h) -> Mặc định là Ca 2
+                if any(k in norm_txt for k in ["ca 1", "11h", "10h", "9h"]):
+                    return 2, "Gán TTS ca 1"
                 return 3, "Gán TTS ca 2"
-            return 2, "Gán TTS ca 1"
 
         return None, "Không xác định"
 
@@ -629,13 +648,13 @@ def evaluate_submission(dt: datetime, milestone_id: int, is_valid: bool, config:
 
     cutoff_str = ms_cfg["cutoff"]
     cutoff_hour, cutoff_min = map(int, cutoff_str.split(":"))
-    cutoff_dt = dt.replace(hour=cutoff_hour, minute=cutoff_min, second=0, microsecond=0)
+    cutoff_dt = dt.replace(hour=cutoff_hour, minute=cutoff_min, second=59, microsecond=999999)
 
     if dt <= cutoff_dt:
         return "ON_TIME", 0, 0, "Đúng hạn"
     else:
         diff_sec = (dt - cutoff_dt).total_seconds()
-        late_min = max(1, int(diff_sec // 60))
+        late_min = max(1, int(diff_sec // 60) + 1)
 
         # Kiểm tra xem AM có xin phép trễ mốc này trong ngày chưa
         has_excuse = False
