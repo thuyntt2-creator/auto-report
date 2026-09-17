@@ -150,11 +150,10 @@ class AttendanceParser:
         EXCLUDED_SENDERS = [
             "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin"
         ]
-        if any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_SENDERS):
-            return None
+        is_admin_sender = any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_SENDERS)
 
         # ── TIER 1: Header / Khai báo trực tiếp (Ưu tiên số 1) ──
-        # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB'
+        # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB', 'AM Duy xin miễn...'
         header_m = re.search(r'(?:khu\s+vực\s+|kv\s+)?am\s*[:\-\s]\s*([^\n\r,\:\;]+)', norm_txt)
         if header_m:
             header_segment = header_m.group(1).strip()
@@ -174,6 +173,10 @@ class AttendanceParser:
                             best_am = am
             if best_am:
                 return best_am
+
+        # Nếu người gửi là Admin mà không khai báo rõ ràng tên AM ở Tier 1 -> Bỏ qua, không nhận diện
+        if is_admin_sender:
+            return None
 
         # ── TIER 2: Tên người gửi GTalk (sender_name) ──
         if sender_name:
@@ -446,7 +449,10 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     parser = AttendanceParser(config)
     detected_am = parser.detect_am(raw_text, sender_name)
     if not detected_am and sender_name:
-        detected_am = parser.detect_am(sender_name, "")
+        norm_sender = normalize_text(sender_name)
+        no_acc_sender = remove_accents(norm_sender)
+        if not any(exc in norm_sender or exc in no_acc_sender for exc in ["nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin"]):
+            detected_am = parser.detect_am(sender_name, "")
     if not detected_am:
         return None
 
