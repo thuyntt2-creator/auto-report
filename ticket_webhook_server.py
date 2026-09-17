@@ -480,7 +480,29 @@ def webhook():
 
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
-    # ─── 1. KIỂM TRA & GHI NHẬN BÁO CÁO ĐIỂM DANH AM (ƯU TIÊN SỐ 1) ──────────
+    # ─── 1. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP / MIỄN BÁO CÁO ────────
+    try:
+        from diem_danh_bot import detect_excuse_request, send_gtalk_message, load_config
+        sender_obj = data.get("sender") or msg_obj.get("sender") or {}
+        sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
+        excuse_info = detect_excuse_request(msg_text, sender_name, channel_id=channel_id)
+        if excuse_info:
+            print(f"[{ts}] 📝 [XIN PHÉP TRỄ / MIỄN] Đã ghi nhận: {excuse_info['am']['full_name']} - {excuse_info['scope_label']}")
+            cfg_am = load_config()
+            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
+            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
+            reply_ch = group_b_id if (5 in excuse_info.get("milestones", []) or str(channel_id) == group_b_id) else (channel_id or group_a_id)
+            send_gtalk_message(excuse_info["reply_msg"], reply_ch)
+            try:
+                from sync_attendance_sheets import sync_daily_to_sheet
+                threading.Thread(target=sync_daily_to_sheet, args=(get_vn_now().date(),), daemon=True).start()
+            except Exception:
+                pass
+            return jsonify({"status": "recorded_excuse", "data": excuse_info})
+    except Exception as e_ex:
+        print(f"[{ts}] [XIN PHÉP] Lỗi: {e_ex}")
+
+    # ─── 2. KIỂM TRA & GHI NHẬN BÁO CÁO ĐIỂM DANH AM ──────────
     try:
         from diem_danh_bot import record_submission
         sender_obj = data.get("sender") or msg_obj.get("sender") or {}
@@ -534,35 +556,13 @@ def webhook():
             return jsonify({"status": "recorded_attendance", "data": res_dd})
         else:
             print(f"[{ts}] [ĐIỂM DANH] Bỏ qua: {status_dd}")
-            if status_dd not in ("Không phải mẫu báo cáo 1-5", "Không xác định được AM"):
+            if status_dd not in ("Không phải mẫu báo cáo 1-5", "Không xác định được AM", "Tin nhắn xin phép / miễn nộp"):
                 return jsonify({"status": "skipped", "reason": status_dd})
     except Exception as e_dd:
         import traceback
         traceback.print_exc()
         print(f"[{ts}] [ĐIỂM DANH] Lỗi: {e_dd}")
         return jsonify({"status": "error", "error": str(e_dd), "trace": traceback.format_exc()})
-
-    # ─── 2. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP / MIỄN BÁO CÁO ────────
-    try:
-        from diem_danh_bot import detect_excuse_request, send_gtalk_message, load_config
-        sender_obj = data.get("sender") or msg_obj.get("sender") or {}
-        sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
-        excuse_info = detect_excuse_request(msg_text, sender_name, channel_id=channel_id)
-        if excuse_info:
-            print(f"[{ts}] 📝 [XIN PHÉP TRỄ / MIỄN] Đã ghi nhận: {excuse_info['am']['full_name']} - {excuse_info['scope_label']}")
-            cfg_am = load_config()
-            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
-            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
-            reply_ch = group_b_id if (5 in excuse_info.get("milestones", []) or str(channel_id) == group_b_id) else (channel_id or group_a_id)
-            send_gtalk_message(excuse_info["reply_msg"], reply_ch)
-            try:
-                from sync_attendance_sheets import sync_daily_to_sheet
-                threading.Thread(target=sync_daily_to_sheet, args=(get_vn_now().date(),), daemon=True).start()
-            except Exception:
-                pass
-            return jsonify({"status": "recorded_excuse", "data": excuse_info})
-    except Exception as e_ex:
-        print(f"[{ts}] [XIN PHÉP] Lỗi: {e_ex}")
 
     # Parse danh sách AM (dành cho Cảnh báo Ticket GLT)
     header, am_items = parse_ticket_message(msg_text)
