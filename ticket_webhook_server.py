@@ -306,7 +306,7 @@ def debug_recent():
         db_rows = []
         with get_db() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, message_id, channel_id, sender_name, received_at, detected_am_name, detected_milestone, is_valid, error_reason FROM raw_messages ORDER BY id DESC LIMIT 15")
+            cur.execute("SELECT id, message_id, channel_id, sender_name, received_at, detected_am_name, detected_milestone, is_valid, error_reason, raw_text FROM raw_messages ORDER BY id DESC LIMIT 15")
             db_rows = [dict(r) for r in cur.fetchall()]
         return jsonify({
             "status": "ok",
@@ -548,7 +548,7 @@ def webhook():
         sender_obj = data.get("sender") or msg_obj.get("sender") or {}
         sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
         sender_id = sender_obj.get("id") or str(data.get("senderId") or "")
-        msg_id = str(data.get("id") or msg_obj.get("id") or time.time())
+        msg_id = str(data.get("globalMsgId") or data.get("clientMsgId") or data.get("id") or msg_obj.get("id") or time.time())
 
         res_dd, status_dd = record_submission(
             sender_name=sender_name,
