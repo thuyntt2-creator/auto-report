@@ -845,6 +845,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
             WHERE date = ? AND am_id = ? AND milestone_id = ?
             """, (today_str, am_id, m_id))
             existing = cur.fetchone()
+            is_update = bool(existing)
 
             if existing:
                 # Nếu trước đó đã nộp Đúng hạn thì không bị ghi đè thành Trễ
@@ -923,6 +924,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         "late_minutes": late_min,
         "penalty": penalty,
         "note": note,
+        "is_update": is_update,
         "hubs": [h["raw_hub"] for h in matched_hubs] if matched_hubs else [],
         "m5_progress_note": m5_progress_note,
         "submit_time": submit_time.strftime("%H:%M:%S")
