@@ -199,9 +199,10 @@ class AttendanceParser:
         geo_ambiguous = {
             'khánh', 'khanh', 'long', 'lâm', 'lam', 'bình', 'binh',
             'hải', 'hai', 'sơn', 'son', 'đông', 'dong', 'nam', 'bắc', 'bac',
-            'thủy', 'thuy', 'an', 'hòa', 'hoa', 'linh', 'thơ', 'tho', 'thu', 'thư'
+            'thủy', 'thuy', 'an', 'hòa', 'hoa', 'linh', 'thơ', 'tho', 'thu', 'thư',
+            'nghĩa', 'nghia'
         }
-        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc|di|quảng|quang|phúc|phuc|yên|yen|đức|duc)\s+$'
+        geo_prev = r'(?:diên|dien|kho|\(kho\)|bưu cục|buu cuc|bc|tỉnh|tinh|tp|thành phố|thanh pho|đại|dai|phú|phu|cam|đắk|dak|hạ|ha|phước|phuoc|di|quảng|quang|phúc|phuc|yên|yen|đức|duc|gia)\s+$'
         geo_next = r'^\s+(?:hòa|hoa|vĩnh|vinh|sơn|son|lâm|lam|điền|dien|nam|bắc|bac|đông|dong|tây|tay|thuận|thuan|định|dinh|trang|nghĩa|nghia|thọ|tho)'
 
         best_match = None

@@ -236,7 +236,11 @@ def sync_daily_to_sheet(target_date: date = None):
         if len(row) >= 2:
             r_date = row[0].strip()
             r_emp_id = row[1].strip()
-            existing_rows[(r_date, r_emp_id)] = idx
+            r_name = row[2].strip() if len(row) >= 3 else ""
+            if r_emp_id:
+                existing_rows[(r_date, r_emp_id)] = idx
+            if r_name:
+                existing_rows[(r_date, r_name)] = idx
 
     try:
         from diem_danh_bot import get_m5_required_ams
@@ -371,7 +375,7 @@ def sync_daily_to_sheet(target_date: date = None):
 
         am_fine_total = fine_late + fine_missing
 
-        row_key = (date_display, emp_id)
+        row_key = (date_display, emp_id) if emp_id and (date_display, emp_id) in existing_rows else (date_display, am_name)
         if row_key in existing_rows:
             row_idx = existing_rows[row_key]
             batch_updates.append({
