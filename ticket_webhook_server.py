@@ -552,10 +552,8 @@ def webhook():
         excuse_info = detect_excuse_request(msg_text, sender_name, channel_id=channel_id)
         if excuse_info:
             print(f"[{ts}] 📝 [XIN PHÉP TRỄ / MIỄN] Đã ghi nhận: {excuse_info['am']['full_name']} - {excuse_info['scope_label']}")
-            cfg_am = load_config()
-            group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
-            group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
-            reply_ch = group_b_id if (5 in excuse_info.get("milestones", []) or str(channel_id) == group_b_id) else (channel_id or group_a_id)
+            # Luôn phản hồi tại đúng group mà tin nhắn được gửi đến (không tự ý nhảy group)
+            reply_ch = channel_id or (group_b_id if (5 in excuse_info.get("milestones", [])) else group_a_id)
             send_gtalk_message(excuse_info["reply_msg"], reply_ch)
             try:
                 from sync_attendance_sheets import sync_daily_to_sheet
@@ -602,12 +600,8 @@ def webhook():
             group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
             group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
 
-            # Mốc 5 (BC Điểm nóng) luôn xác nhận vào Group B; Mốc 1-4 xác nhận vào Group gửi đến / Group A
-            if res_dd.get("milestone_id") == 5:
-                reply_channel = group_b_id
-            else:
-                reply_channel = channel_id or group_a_id
-
+            # Luôn phản hồi tại đúng group mà tin nhắn được gửi đến
+            reply_channel = channel_id or (group_b_id if res_dd.get("milestone_id") == 5 else group_a_id)
             send_gtalk_message(confirm_msg, reply_channel)
 
             # Tự động đồng bộ thời gian thực lên Google Sheet

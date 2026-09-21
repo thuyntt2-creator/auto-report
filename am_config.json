@@ -184,9 +184,7 @@
         "nghĩa ndm",
         "nghia ndm",
         "am ndm",
-        "ndm",
-        "nghĩa",
-        "nghia"
+        "ndm"
       ]
     },
     {
@@ -257,7 +255,6 @@
         "hoang phi",
         "phi nh",
         "nhphi",
-        "phi",
         "phinh",
         "am phi",
         "am hoàng phi",
@@ -288,8 +285,6 @@
         "thtiến",
         "tien th",
         "tiến th",
-        "tiến",
-        "tien",
         "1877946"
       ],
       "employee_id": "1877946"
@@ -313,7 +308,6 @@
         "chihtk",
         "htkchi",
         "chi htk",
-        "chi",
         "3062894"
       ],
       "employee_id": "3062894"
@@ -342,8 +336,6 @@
         "lvtrường",
         "truong lv",
         "trường lv",
-        "trường",
-        "truong",
         "3164872"
       ],
       "employee_id": "3164872"
@@ -367,7 +359,6 @@
         "ngahb",
         "hbnga",
         "nga hb",
-        "nga",
         "3062453"
       ],
       "employee_id": "3062453"
@@ -396,8 +387,6 @@
         "tttthư",
         "thu ttt",
         "thư ttt",
-        "thư",
-        "thu",
         "3087650"
       ],
       "employee_id": "3087650"
@@ -499,8 +488,6 @@
       "aliases": [
         "cao thị thanh thủy",
         "cao thi thanh thuy",
-        "thanh thủy",
-        "thanh thuy",
         "thủy am",
         "thuy am",
         "am thanh thủy",
@@ -687,8 +674,6 @@
         "lmlợi",
         "loi lm",
         "lợi lm",
-        "lợi",
-        "loi",
         "3177907"
       ],
       "employee_id": "3177907"
@@ -717,8 +702,6 @@
         "lmđại",
         "dai lm",
         "đại lm",
-        "đại",
-        "dai",
         "3023476"
       ],
       "employee_id": "3023476"
@@ -738,10 +721,8 @@
         "tlv",
         "tran le vuong",
         "trần lê vương",
-        "vuong",
         "vuong am",
         "vuonglv",
-        "vương",
         "vương am"
       ]
     },
@@ -751,8 +732,6 @@
       "display_name": "AM Hoàng",
       "is_active": false,
       "aliases": [
-        "hoàng",
-        "hoang",
         "am hoàng",
         "am hoang",
         "kv hoàng",
@@ -773,11 +752,8 @@
         "am lực",
         "kv luc",
         "kv lực",
-        "l",
-        "luc",
         "luc am",
         "lucl",
-        "lực",
         "lực am"
       ]
     },
@@ -802,9 +778,7 @@
         "phướctv",
         "tvphước",
         "phuoc tv",
-        "phước tv",
-        "phuoc",
-        "phước"
+        "phước tv"
       ]
     },
     {
@@ -830,9 +804,7 @@
         "côngpbt",
         "pbtcông",
         "cong pbt",
-        "công pbt",
-        "công",
-        "cong"
+        "công pbt"
       ]
     },
     {
@@ -858,9 +830,7 @@
         "diễmptn",
         "ptndiễm",
         "diem ptn",
-        "diễm ptn",
-        "diễm",
-        "diem"
+        "diễm ptn"
       ]
     },
     {
@@ -886,9 +856,7 @@
         "tâmlhm",
         "lhmtâm",
         "tam lhm",
-        "tâm lhm",
-        "tâm",
-        "tam"
+        "tâm lhm"
       ]
     }
   ]

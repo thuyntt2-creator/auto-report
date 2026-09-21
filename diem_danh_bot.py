@@ -147,16 +147,24 @@ class AttendanceParser:
         no_acc_sender = remove_accents(norm_sender)
 
         # ── LOẠI TRỪ ADMIN / QUẢN LÝ / TRỢ LÝ (Không phải AM báo cáo) ──
-        EXCLUDED_SENDERS = [
-            "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin"
+        EXCLUDED_ADMINS = [
+            "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin",
+            "thanh thủy ghn", "thanh thuy ghn"
         ]
-        is_admin_sender = any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_SENDERS)
+        is_admin_sender = any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_ADMINS)
+
+        # Loại bỏ tag/nhắc tên Admin khỏi nội dung để tránh nhận nhầm sang AM Cao Thị Thanh Thủy
+        clean_norm_txt = norm_txt
+        clean_no_acc_txt = no_acc_txt
+        for adm in EXCLUDED_ADMINS:
+            clean_norm_txt = clean_norm_txt.replace(adm, " ")
+            clean_no_acc_txt = clean_no_acc_txt.replace(remove_accents(adm), " ")
 
         # ── TIER 1: Header / Khai báo trực tiếp (Ưu tiên số 1) ──
-        # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB', 'AM Duy xin miễn...'
-        header_m = re.search(r'(?:khu\s+vực\s+|kv\s+)?am\s*[:\-\s]\s*([^\n\r,\:\;]+)', norm_txt)
+        # Bắt mẫu: 'Khu vực AM DuyPĐ', 'AM LongNT', 'KV AM TienTH', 'KV Thư', 'Khu vực Thư', 'AM: Nguyễn Thanh Long', 'Báo cáo ... AM NgaHB', 'AM Duy xin miễn...'
+        header_m = re.search(r'(?:khu\s+vực|kv)(?:\s+am)?\s*[:\-\s]\s*([^\n\r,\:\;]+)|(?:\b|^)am\s*[:\-\s]\s*([^\n\r,\:\;]+)', clean_norm_txt)
         if header_m:
-            header_segment = header_m.group(1).strip()
+            header_segment = (header_m.group(1) or header_m.group(2) or "").strip()
             no_acc_header = remove_accents(header_segment)
             best_len = 0
             best_am = None
@@ -217,18 +225,20 @@ class AttendanceParser:
                 p = r'(?:\b|_)' + re.escape(na) + r'(?:\b|_)'
                 p_noa = r'(?:\b|_)' + re.escape(noa) + r'(?:\b|_)'
 
-                # Từ đơn trong nội dung tin nhắn bắt buộc phải đúng dấu tiếng Việt để tránh đụng từ (ví dụ: 'thọ' nhầm 'tho')
-                if len(words) == 1 and len(na) <= 5:
-                    m_obj = re.search(p, norm_txt)
+                # BẢO VỆ TUYỆT ĐỐI CHỐNG TỪ ĐƠN TIẾNG VIỆT THÔNG DỤNG (thu, chi, công, lợi, tâm, đại, lực, v.v.):
+                # Nếu là từ đơn ngắn (<= 6 ký tự) không chứa số: BẮT BUỘC phải có tiền tố AM/KV/Khu vực
+                if len(words) == 1 and len(na) <= 6 and not any(c.isdigit() for c in na):
+                    p_prefix = r'(?:\b|_)(?:am|kv|khu\s+vực)\s+' + re.escape(na) + r'(?:\b|_)'
+                    m_obj = re.search(p_prefix, clean_norm_txt)
                 else:
-                    m_obj = re.search(p, norm_txt) or re.search(p_noa, no_acc_txt)
+                    m_obj = re.search(p, clean_norm_txt) or re.search(p_noa, clean_no_acc_txt)
 
                 if m_obj:
                     # Kiểm tra xem có phải tên bưu cục/địa danh tỉnh huyện trùng với tên AM hay không
                     if na in geo_ambiguous or noa in geo_ambiguous:
                         start, end = m_obj.start(), m_obj.end()
-                        before = norm_txt[:start]
-                        after = norm_txt[end:]
+                        before = clean_norm_txt[:start]
+                        after = clean_norm_txt[end:]
                         if re.search(geo_prev, before) or re.search(geo_next, after):
                             continue
                     if len(na) > longest_alias_len:
@@ -491,9 +501,17 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         "chua cap quyen", "chưa cấp quyền"
     ])
 
+    # Kiểm tra AM có bưu cục điểm nóng trong tab 'BC GTC dưới 50' hay không
+    am_has_m5 = False
+    try:
+        m5_map = get_m5_required_ams()
+        am_has_m5 = bool(detected_am and detected_am["id"] in m5_map)
+    except Exception:
+        pass
+
     if is_id_locked:
-        milestones = [1, 5, 2, 3, 4]
-        scope_label = "Cả ngày (5 Mốc - Khóa ID hệ thống)"
+        milestones = [1, 5, 2, 3, 4] if am_has_m5 else [1, 2, 3, 4]
+        scope_label = f"Cả ngày ({len(milestones)} Mốc - Khóa ID hệ thống)"
         next_reminder = "Chúc AM sớm mở lại tài khoản để tiếp tục công việc nhé!"
         reason = "Bị khóa ID / Tài khoản hệ thống"
         is_exemption = True
@@ -504,7 +522,7 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         reason = "Đang bàn giao bưu cục / Chưa có dữ liệu"
         is_exemption = True
     elif any(k in norm_txt for k in ["cả ngày", "ca ngay", "nguyên ngày", "hôm nay off", "hom nay off"]):
-        milestones = [1, 5, 2, 3, 4]
+        milestones = [1, 5, 2, 3, 4] if am_has_m5 else [1, 2, 3, 4]
         scope_label = "Cả ngày (Tất cả các mốc)"
         next_reminder = "Chúc AM nghỉ ngơi / công tác tốt nhé!"
         reason = "Nghỉ phép cả ngày"
@@ -552,16 +570,24 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
         reason = None
         is_exemption = False
     elif re.search(r'\b(?:sáng|sang|11h(?:00)?|9h(?:00)?)\b', norm_txt):
-        milestones = [1, 5, 2]
-        scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
+        if am_has_m5:
+            milestones = [1, 5, 2]
+            scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
+        else:
+            milestones = [1, 2]
+            scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 2 - Gán TTS)"
         next_reminder = "Ca chiều (16h00) và Ca tối (20h00) vẫn báo cáo đúng timeline quy định nhé!"
         reason = None
         is_exemption = False
     else:
         cur_hour = dt.hour
         if cur_hour < 12:
-            milestones = [1, 5, 2]
-            scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
+            if am_has_m5:
+                milestones = [1, 5, 2]
+                scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 5 - Điểm nóng, Mốc 2 - Gán TTS)"
+            else:
+                milestones = [1, 2]
+                scope_label = "Ca sáng (Mốc 1 - Đầu ngày, Mốc 2 - Gán TTS)"
             next_reminder = "Ca chiều (16h00) và Ca tối (20h00) vẫn báo cáo đúng timeline quy định nhé!"
         elif 12 <= cur_hour < 18:
             milestones = [3]
@@ -722,10 +748,9 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
         # BẢO VỆ CHỐNG BẮT NHẦM CHAT THƯỜNG TRONG GROUP B:
         # Chỉ xử lý là báo cáo Mốc 5 nếu:
         # 1. Có bưu cục điểm nóng khớp trong tin nhắn (matched_hubs)
-        # 2. HOẶC tin nhắn có từ khóa / cấu trúc số liệu báo cáo rõ ràng
-        report_cues = ["tồn", "ton", "nvpttt", "xuất hàng", "xuat hang", "điểm nóng", "diem nong", "gtc", "báo cáo", "bao cao", "bưu cục", "buu cuc", "bc "]
-        has_report_struct = any(k in raw_text.lower() for k in report_cues)
-        if not matched_hubs and not has_report_struct:
+        # 2. HOẶC tin nhắn có số liệu báo cáo rõ ràng (tồn, xuất hàng, nhân sự)
+        has_metrics = bool(re.search(r'(?:tồn\s*[:/]\s*\d+|ton\s*[:/]\s*\d+|xuất hàng|xuat hang|time xuất|time xuat|nvpttt|nhân sự\s*[:/]|nhan su\s*[:/]|tồn\s*/\s*tổng|ton\s*/\s*tong)', raw_text, re.IGNORECASE))
+        if not matched_hubs and not has_metrics:
             return None, "Chat thông thường trong Group B (không phải báo cáo Mốc 5)"
 
         m_id = 5
@@ -742,8 +767,23 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     if not detected_am:
         return None, "Không xác định được AM"
 
+    # BẢO VỆ: Nếu nhận diện Mốc 5 nhưng AM không có bưu cục nào dưới 50% và không khớp bưu cục nào
+    if m_id == 5 and not matched_hubs:
+        try:
+            m5_req = get_m5_required_ams()
+            if m5_req and detected_am.get("id") not in m5_req:
+                return None, f"AM {detected_am['full_name']} không có bưu cục GTC <50% (bỏ qua chat Group B)"
+        except Exception:
+            pass
+
     # Kiểm tra nội dung bắt buộc
     is_valid, reason = parser.validate_content(m_id, raw_text)
+
+    # BẢO VỆ TUYỆT ĐỐI CHO GROUP B: Nếu không hợp lệ mà lại KHÔNG CÓ bưu cục điểm nóng khớp
+    # -> Đây là chat/thảo luận trong Group B, tuyệt đối KHÔNG ĐƯỢC phạt 200k!
+    if m_id == 5 and not is_valid and not matched_hubs:
+        return None, "Chat thông thường trong Group B (không có bưu cục điểm nóng hợp lệ)"
+
     status, late_min, penalty, note = evaluate_submission(submit_time, m_id, is_valid, config, detected_am["id"])
 
     # Lưu DB
