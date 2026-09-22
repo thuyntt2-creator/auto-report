@@ -357,15 +357,30 @@ def generate_hub_variants(raw_hub: str):
     """
     Sinh các biến thể tên bưu cục để bắt được linh hoạt khi AM viết tắt/rút gọn.
     Ví dụ: '(LDO) Tân Hà Lâm Hà' -> ['(LDO) Tân Hà Lâm Hà', 'Tân Hà Lâm Hà', 'Tân Hà Lâm', 'Tân Hà']
+    Tuyệt đối KHÔNG cắt bỏ số phân biệt chi nhánh (1, 2, 3) như 'Lang Biang - Đà Lạt 1' vs 'Lang Biang - Đà Lạt 2'.
     """
     clean = re.sub(r'^\([A-Za-z0-9]+\)\s*', '', raw_hub).strip()
     variants = [raw_hub, clean]
-    sub_district = re.sub(r'\s*[\-\–]\s*.*$', '', clean)
-    sub_lamha = re.sub(r'\s+lâm\s+hà$', '', clean, flags=re.I)
-    sub_trunc = re.sub(r'\s+hà$', '', clean, flags=re.I)
-    for v in [sub_district, sub_lamha, sub_trunc]:
-        if len(v.strip()) >= 4 and v.strip() not in variants:
-            variants.append(v.strip())
+
+    # Kiểm tra xem tên bưu cục có số phân biệt ở cuối không (ví dụ: '1', '2', 'Đà Lạt 1', 'Đà Lạt 2', 'Đức Trọng 1')
+    m_branch_num = re.search(r'(\d+)$', clean.strip())
+    if m_branch_num:
+        num = m_branch_num.group(1)
+        prefix_part = re.sub(r'\s*[\-\–]\s*.*$', '', clean).strip()
+        if prefix_part:
+            v_num = f"{prefix_part} {num}"
+            if v_num not in variants:
+                variants.append(v_num)
+            v_dash_num = f"{prefix_part} - {num}"
+            if v_dash_num not in variants:
+                variants.append(v_dash_num)
+    else:
+        sub_district = re.sub(r'\s*[\-\–]\s*.*$', '', clean)
+        sub_lamha = re.sub(r'\s+lâm\s+hà$', '', clean, flags=re.I)
+        sub_trunc = re.sub(r'\s+hà$', '', clean, flags=re.I)
+        for v in [sub_district, sub_lamha, sub_trunc]:
+            if len(v.strip()) >= 4 and v.strip() not in variants:
+                variants.append(v.strip())
     return variants
 
 def detect_hubs_in_text(text: str):
@@ -755,11 +770,16 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
 
         m_id = 5
         m_name = "BC Điểm nóng (GTC <50%)"
-        # Báo cáo Mốc 5: Bưu cục thuộc quyền AM nào trong tab 'BC GTC dưới 50' thì ưu tiên AM đó
-        if matched_hubs and matched_hubs[0].get("am"):
+        # Báo cáo Mốc 5:
+        if detected_am and matched_hubs:
+            # Nếu AM đã được xác định (từ người gửi hoặc tiêu đề) mà AM đó phụ trách 1 trong các bưu cục tìm thấy:
+            # Ưu tiên lọc danh sách bưu cục theo đúng AM đó (tránh bị bưu cục trùng tên của AM khác chiếm quyền)
+            am_hubs = [h for h in matched_hubs if h.get("am") and h["am"]["id"] == detected_am["id"]]
+            if am_hubs:
+                matched_hubs = am_hubs
+        elif not detected_am and matched_hubs and matched_hubs[0].get("am"):
+            # Nếu chưa xác định được AM thì mới lấy AM của bưu cục tìm thấy
             detected_am = matched_hubs[0]["am"]
-        elif matched_hubs and not detected_am:
-            detected_am = matched_hubs[0].get("am")
 
     if not m_id:
         return None, "Không phải mẫu báo cáo 1-5"
