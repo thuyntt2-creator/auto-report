@@ -289,6 +289,17 @@ def sync_daily_to_sheet(target_date: date = None):
                     old_val = old_row_data[col_offset].strip()
 
             if not rec:
+                # BẢO VỆ ĐẶC BIỆT: Mốc 4 (LTC TTS, hạn 20:00) nếu old_val là giờ buổi sáng (<14:00)
+                # thì chắc chắn là do nhận nhầm báo cáo sáng, KHÔNG giữ lại!
+                if m_id == 4 and old_val.startswith("✅"):
+                    try:
+                        time_part = old_val.replace("✅", "").strip()
+                        hh = int(time_part.split(":")[0])
+                        if hh < 14:
+                            old_val = ""
+                    except Exception:
+                        pass
+
                 if old_val.startswith("✅"):
                     m_texts.append(old_val)
                 elif old_val.startswith("⚠️"):
