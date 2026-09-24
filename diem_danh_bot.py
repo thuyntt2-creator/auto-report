@@ -286,14 +286,12 @@ class AttendanceParser:
 
         if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m1_keywords):
             return 1, "Tổng hợp đầu ngày"
-        if any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m4_keywords):
-            return 4, "LTC TTS"
-        if re.search(r'\blc\b.*?(?:23h|trước|truoc)', norm_txt) or re.search(r'\btts\b.*?\blc\b', norm_txt):
-            return 4, "LTC TTS"
+
         has_m2 = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m2_keywords) or bool(re.search(r'\b(?:trước\s*)?(?:9h|10h|11h)\b', norm_txt))
         has_m3 = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m3_keywords) or bool(re.search(r'\b(?:trước\s*)?(?:15h|16h)\b', norm_txt))
+        has_gan_tts = "gán tts" in norm_txt or "gan tts" in no_accent_txt or "chưa gán" in norm_txt or "chua gan" in no_accent_txt
 
-        # Nếu có từ khóa của cả Ca 1 và Ca 2 (ví dụ AM copy nhầm mẫu có dòng 'trước 16h' vào báo cáo ca 1 'trước 11h')
+        # Ưu tiên nhận diện Báo cáo Gán TTS Ca 1 & Ca 2 (Mốc 2 & Mốc 3)
         if has_m2 and has_m3:
             if submit_time.hour < 13:
                 return 2, "Gán TTS ca 1"
@@ -306,27 +304,25 @@ class AttendanceParser:
                 return 2, "Gán TTS ca 1"
             if has_m3:
                 return 3, "Gán TTS ca 2"
+            if has_gan_tts:
+                return 2, "Gán TTS ca 1"
         else:
             # Nếu gửi buổi chiều (>= 13:00): Ưu tiên Ca 2 (Mốc 3, cut-off 16:00)
             if has_m3:
                 return 3, "Gán TTS ca 2"
             if has_m2:
                 return 2, "Gán TTS ca 1"
+            if has_gan_tts:
+                return 3, "Gán TTS ca 2"
+
+        # Báo cáo Mốc 4: LTC TTS (Thường nộp ca tối trước 20:00 / 23:00)
+        # Bắt buộc phải có từ khóa LTC hoặc dự kiến LC trước 23h00 (tránh bắt nhầm ghi chú 'lc hàng' của ca sáng)
+        is_m4 = any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m4_keywords)
+        if is_m4 or re.search(r'\blc\b.*?(?:23h|23h00)', norm_txt) or re.search(r'(?:không|khong)\s+lc\b.*?(?:được|duoc|trước|truoc)', norm_txt):
+            return 4, "LTC TTS"
 
         if re.search(r'tồn\s*/\s*tổng|ton\s*/\s*tong|tồn\s*:\s*\d+|ton\s*:\s*\d+', norm_txt) or any(k in norm_txt or remove_accents(k) in no_accent_txt for k in m5_keywords):
             return 5, "BC Điểm nóng (GTC <50%)"
-
-        if "gán tts" in norm_txt or "gan tts" in no_accent_txt:
-            # Nếu gửi buổi sáng (< 13h) -> Mặc định là Ca 1 trừ khi chỉ định rõ ràng ca 2 / 16h
-            if submit_time.hour < 13:
-                if any(k in norm_txt for k in ["ca 2", "15h", "16h", "chiều", "chieu"]):
-                    return 3, "Gán TTS ca 2"
-                return 2, "Gán TTS ca 1"
-            else:
-                # Gửi buổi chiều (>= 13h) -> Mặc định là Ca 2
-                if any(k in norm_txt for k in ["ca 1", "11h", "10h", "9h"]):
-                    return 2, "Gán TTS ca 1"
-                return 3, "Gán TTS ca 2"
 
         return None, "Không xác định"
 
