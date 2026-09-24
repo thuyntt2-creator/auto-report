@@ -427,6 +427,41 @@ def admin_fix_thuy():
             conn.commit()
         sync_daily_to_sheet(get_vn_today())
         return jsonify({"status": "ok", "message": "Cleared am_thuy_ctt M5 record and synced sheet"})
+@app.route("/admin/fix_loi_m2", methods=["GET", "POST"])
+def admin_fix_loi_m2():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet, get_sheet_client, SPREADSHEET_ID, SHEET_TITLE
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM attendance_records WHERE date = ? AND am_id = 'am_loi_lm' AND milestone_id = 4", (today_str,))
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_loi_lm', 'Lê Minh Lợi', 2, ? || ' 09:55:39', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = ? || ' 09:55:39',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str, today_str, today_str))
+            conn.commit()
+
+        # Đảm bảo cell M4 trên sheet không bị giữ lại giá trị cũ
+        gc = get_sheet_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet(SHEET_TITLE)
+        rows = ws.get_all_values()
+        date_display = get_vn_today().strftime("%d/%m/%Y")
+        for idx, r in enumerate(rows, 1):
+            if r[0] == date_display and 'Lợi' in r[2]:
+                ws.update_cell(idx, 5, '✅ 09:55')
+                ws.update_cell(idx, 7, '❌ Chưa nộp (100k)')
+                break
+
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Updated AM Loi M2 ON_TIME and cleared M4 in SQLite and Sheet"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
