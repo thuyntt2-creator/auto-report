@@ -124,8 +124,14 @@ def init_db():
 def normalize_text(text: str) -> str:
     if not text:
         return ""
-    s = unicodedata.normalize("NFC", str(text)).strip().lower()
-    return re.sub(r'[\r\t]', ' ', s)
+    # Chuyển các thẻ ngắt dòng thành xuống dòng thật
+    clean = re.sub(r'(?i)<br\s*/?>|</?p>', '\n', str(text))
+    # Loại bỏ triệt để mọi thẻ HTML còn lại (<b>, </b>, <i>, </i>, <span>, ...) tránh thẻ chen ngang từ khóa
+    clean = re.sub(r'<[^>]+>', ' ', clean)
+    s = unicodedata.normalize("NFC", clean).strip().lower()
+    s = re.sub(r'[\r\t]', ' ', s)
+    lines = [re.sub(r' +', ' ', line).strip() for line in s.split('\n')]
+    return '\n'.join(line for line in lines if line)
 
 def remove_accents(input_str: str) -> str:
     if not input_str:
