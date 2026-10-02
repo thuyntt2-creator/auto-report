@@ -92,7 +92,8 @@ def restore_db_from_sheet(target_date: date = None):
     
     try:
         config = load_config()
-        active_map = {str(am.get('employee_id')): am for am in config['ams'] if am.get('is_active', True)}
+        active_map_by_emp = {str(am.get('employee_id')): am for am in config['ams'] if am.get('is_active', True) and am.get('employee_id')}
+        active_map_by_name = {am['full_name'].strip(): am for am in config['ams'] if am.get('is_active', True)}
         
         gc = get_sheet_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
@@ -108,9 +109,10 @@ def restore_db_from_sheet(target_date: date = None):
                 if len(row) < 8 or row[0].strip() != date_display:
                     continue
                 emp_id = row[1].strip()
-                if emp_id not in active_map:
+                am_name_sheet = row[2].strip() if len(row) > 2 else ""
+                am = active_map_by_emp.get(emp_id) or active_map_by_name.get(am_name_sheet)
+                if not am:
                     continue
-                am = active_map[emp_id]
                 am_id = am['id']
                 am_name = am['full_name']
                 
@@ -255,7 +257,7 @@ def sync_daily_to_sheet(target_date: date = None):
         am_id = am["id"]
         emp_id = str(am.get("employee_id", ""))
         am_name = am["full_name"]
-        row_key = (date_display, emp_id)
+        row_key = (date_display, emp_id) if emp_id and (date_display, emp_id) in existing_rows else (date_display, am_name)
 
         m_texts = []
         count_late = 0
