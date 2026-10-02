@@ -491,6 +491,7 @@ def admin_fix_chi_m2():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/admin/fix_nghia_m1", methods=["GET", "POST"])
+@app.route("/admin/fix_nghia_today", methods=["GET", "POST"])
 def admin_fix_nghia_m1():
     try:
         from diem_danh_bot import get_db, get_vn_today
@@ -508,9 +509,20 @@ def admin_fix_nghia_m1():
                 penalty_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
             """, (today_str, today_str, today_str))
+
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_nghia_ndm', 'Nguyễn Đỗ Minh Nghĩa', 2, ? || ' 10:45:00', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = ? || ' 10:45:00',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str, today_str, today_str))
             conn.commit()
         sync_daily_to_sheet(get_vn_today())
-        return jsonify({"status": "ok", "message": "Updated AM Nghĩa M1 ON_TIME quietly in SQLite and Google Sheet"})
+        return jsonify({"status": "ok", "message": "Updated AM Nghĩa M1 & M2 ON_TIME quietly in SQLite and Google Sheet"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
