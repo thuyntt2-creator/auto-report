@@ -24,6 +24,30 @@ def get_vn_today() -> date:
     """Trả về ngày hiện tại chuẩn theo múi giờ Việt Nam (GMT+7)."""
     return get_vn_now().date()
 
+def is_am_active_on_date(am: dict, target_date: date = None) -> bool:
+    """Kiểm tra AM có đang hoạt động vào ngày target_date hay không (hỗ trợ start_date và end_date)."""
+    if not am.get("is_active", True):
+        return False
+    if target_date is None:
+        target_date = get_vn_today()
+    start_date_str = am.get("start_date")
+    if start_date_str:
+        try:
+            s_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            if target_date < s_date:
+                return False
+        except Exception:
+            pass
+    end_date_str = am.get("end_date")
+    if end_date_str:
+        try:
+            e_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            if target_date > e_date:
+                return False
+        except Exception:
+            pass
+    return True
+
 import gspread
 from google.oauth2.credentials import Credentials
 
@@ -92,8 +116,8 @@ def restore_db_from_sheet(target_date: date = None):
     
     try:
         config = load_config()
-        active_map_by_emp = {str(am.get('employee_id')): am for am in config['ams'] if am.get('is_active', True) and am.get('employee_id')}
-        active_map_by_name = {am['full_name'].strip(): am for am in config['ams'] if am.get('is_active', True)}
+        active_map_by_emp = {str(am.get('employee_id')): am for am in config['ams'] if is_am_active_on_date(am, target_date) and am.get('employee_id')}
+        active_map_by_name = {am['full_name'].strip(): am for am in config['ams'] if is_am_active_on_date(am, target_date)}
         
         gc = get_sheet_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
@@ -190,7 +214,7 @@ def sync_daily_to_sheet(target_date: date = None):
     date_display = target_date.strftime("%d/%m/%Y")
     
     config = load_config()
-    active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    active_ams = [am for am in config["ams"] if is_am_active_on_date(am, target_date)]
     
     # Lấy dữ liệu điểm danh từ DB
     with get_db() as conn:

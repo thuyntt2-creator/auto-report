@@ -52,6 +52,30 @@ def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
+def is_am_active_on_date(am: dict, target_date: date = None) -> bool:
+    """Kiểm tra AM có đang hoạt động vào ngày target_date hay không (hỗ trợ start_date và end_date)."""
+    if not am.get("is_active", True):
+        return False
+    if target_date is None:
+        target_date = get_vn_today()
+    start_date_str = am.get("start_date")
+    if start_date_str:
+        try:
+            s_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            if target_date < s_date:
+                return False
+        except Exception:
+            pass
+    end_date_str = am.get("end_date")
+    if end_date_str:
+        try:
+            e_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            if target_date > e_date:
+                return False
+        except Exception:
+            pass
+    return True
+
 # ─── DATABASE SQLITE ──────────────────────────────────────────
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=15)
@@ -1038,7 +1062,7 @@ def generate_milestone_recap(milestone_id: int, target_date: date = None):
     date_str = target_date.strftime("%Y-%m-%d")
     date_display = target_date.strftime("%d/%m/%Y")
 
-    active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    active_ams = [am for am in config["ams"] if is_am_active_on_date(am, target_date)]
     m5_map = {}
     if milestone_id == 5:
         m5_map = get_m5_required_ams()
@@ -1180,7 +1204,7 @@ def generate_milestone_reminder(milestone_id: int, target_date: date = None):
     cutoff = ms_cfg["cutoff"]
     date_str = target_date.strftime("%Y-%m-%d")
 
-    active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    active_ams = [am for am in config["ams"] if is_am_active_on_date(am, target_date)]
     if milestone_id == 5:
         m5_map = get_m5_required_ams()
         if m5_map:
@@ -1266,7 +1290,7 @@ def generate_daily_recap(target_date: date = None):
     date_str = target_date.strftime("%Y-%m-%d")
     date_display = target_date.strftime("%d/%m/%Y")
 
-    active_ams = [am for am in config["ams"] if am.get("is_active", True)]
+    active_ams = [am for am in config["ams"] if is_am_active_on_date(am, target_date)]
     milestones = config["milestones"]
 
     with get_db() as conn:
