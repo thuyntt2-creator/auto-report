@@ -320,18 +320,36 @@ def debug_recent():
 def health_check():
     return jsonify({"status": "ok", "time": get_vn_now().strftime("%Y-%m-%d %H:%M:%S")})
 
-@app.route("/admin/fix_duy", methods=["GET", "POST"])
-def admin_fix_duy():
+@app.route("/admin/clean_today", methods=["GET", "POST"])
+def admin_clean_today():
     try:
         from diem_danh_bot import get_db, get_vn_today
         from sync_attendance_sheets import sync_daily_to_sheet
         today_str = get_vn_today().strftime("%Y-%m-%d")
         with get_db() as conn:
             cur = conn.cursor()
+            cur.execute("DELETE FROM excuses WHERE date = ? AND am_id IN ('am_duy_pd', 'am_vu_nln') AND milestone_id = 5", (today_str,))
+            cur.execute("DELETE FROM attendance_records WHERE date = ? AND am_id IN ('am_duy_pd', 'am_vu_nln') AND milestone_id = 5", (today_str,))
+            conn.commit()
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Cleared Duy & Vu M5 exemption in SQLite and re-synced"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/admin/fix_duy", methods=["POST"])
+def admin_fix_duy():
+    try:
+        from flask import request
+        from diem_danh_bot import get_db
+        from sync_attendance_sheets import sync_daily_to_sheet
+        target_date_str = request.args.get("date", "2026-09-16")
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+        with get_db() as conn:
+            cur = conn.cursor()
             cur.execute("""
             INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at, excuse_type)
             VALUES (?, 'am_duy_pd', 'Phan Đình Duy', 5, 'Đi tuyến / Miễn báo cáo Mốc 5', 'Xin miễn mốc 5', CURRENT_TIMESTAMP, 'EXEMPTION')
-            """, (today_str,))
+            """, (target_date_str,))
             cur.execute("""
             INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
             VALUES (?, 'am_duy_pd', 'Phan Đình Duy', 5, CURRENT_TIMESTAMP, 'EXEMPT', 0, 0, CURRENT_TIMESTAMP)
@@ -340,25 +358,27 @@ def admin_fix_duy():
                 late_minutes = 0,
                 penalty_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
-            """, (today_str,))
+            """, (target_date_str,))
             conn.commit()
-        sync_daily_to_sheet(get_vn_today())
-        return jsonify({"status": "ok", "message": "Updated AM Duy exemption in SQLite and synced to Google Sheet"})
+        sync_daily_to_sheet(target_date)
+        return jsonify({"status": "ok", "message": f"Updated AM Duy exemption for {target_date_str} in SQLite and synced to Google Sheet"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/fix_vu", methods=["GET", "POST"])
+@app.route("/admin/fix_vu", methods=["POST"])
 def admin_fix_vu():
     try:
-        from diem_danh_bot import get_db, get_vn_today
+        from flask import request
+        from diem_danh_bot import get_db
         from sync_attendance_sheets import sync_daily_to_sheet
-        today_str = get_vn_today().strftime("%Y-%m-%d")
+        target_date_str = request.args.get("date", "2026-09-16")
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
         with get_db() as conn:
             cur = conn.cursor()
             cur.execute("""
             INSERT OR REPLACE INTO excuses (date, am_id, am_name, milestone_id, reason, raw_text, created_at, excuse_type)
             VALUES (?, 'am_vu_nln', 'Nguyễn Lê Nguyên Vũ', 5, 'Chưa vào được DB / Miễn nộp Mốc 5', 'Chưa vô được DB', CURRENT_TIMESTAMP, 'EXEMPTION')
-            """, (today_str,))
+            """, (target_date_str,))
             cur.execute("""
             INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
             VALUES (?, 'am_vu_nln', 'Nguyễn Lê Nguyên Vũ', 5, CURRENT_TIMESTAMP, 'EXEMPT', 0, 0, CURRENT_TIMESTAMP)
@@ -367,10 +387,10 @@ def admin_fix_vu():
                 late_minutes = 0,
                 penalty_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
-            """, (today_str,))
+            """, (target_date_str,))
             conn.commit()
-        sync_daily_to_sheet(get_vn_today())
-        return jsonify({"status": "ok", "message": "Updated AM Vu exemption in SQLite and synced to Google Sheet"})
+        sync_daily_to_sheet(target_date)
+        return jsonify({"status": "ok", "message": f"Updated AM Vu exemption for {target_date_str} in SQLite and synced to Google Sheet"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
