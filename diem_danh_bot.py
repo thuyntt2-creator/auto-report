@@ -328,21 +328,14 @@ class AttendanceParser:
             else:
                 return 3, "Gán TTS ca 2"
 
-        # Nếu gửi buổi sáng (< 13:00): Ưu tiên Ca 1 (Mốc 2, cut-off 11:00)
+        # Nếu gửi buổi sáng (< 13:00): Luôn là Ca 1 (Mốc 2, cut-off 11:00)
+        # Kể cả AM copy nhầm chữ 'trước 16h' thì sáng vẫn tính là Ca 1
         if submit_time.hour < 13:
-            if has_m2:
-                return 2, "Gán TTS ca 1"
-            if has_m3:
-                return 3, "Gán TTS ca 2"
-            if has_gan_tts:
+            if has_m2 or has_gan_tts or has_m3:
                 return 2, "Gán TTS ca 1"
         else:
-            # Nếu gửi buổi chiều (>= 13:00): Ưu tiên Ca 2 (Mốc 3, cut-off 16:00)
-            if has_m3:
-                return 3, "Gán TTS ca 2"
-            if has_m2:
-                return 2, "Gán TTS ca 1"
-            if has_gan_tts:
+            # Nếu gửi buổi chiều (>= 13:00): Luôn ưu tiên Ca 2 (Mốc 3, cut-off 16:00)
+            if has_m3 or has_gan_tts or has_m2:
                 return 3, "Gán TTS ca 2"
 
         # Báo cáo Mốc 4: LTC TTS (Thường nộp ca tối trước 20:00 / 23:00)
