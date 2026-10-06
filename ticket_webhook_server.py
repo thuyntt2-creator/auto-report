@@ -447,6 +447,9 @@ def admin_fix_thuy():
             conn.commit()
         sync_daily_to_sheet(get_vn_today())
         return jsonify({"status": "ok", "message": "Cleared am_thuy_ctt M5 record and synced sheet"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/fix_loi_m2", methods=["GET", "POST"])
 def admin_fix_loi_m2():
     try:
