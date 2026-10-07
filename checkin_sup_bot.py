@@ -492,7 +492,7 @@ def handle_sup_webhook(data: dict):
                 checkin_time=now_hm,
                 location=location,
                 note="Đúng giờ" if is_on_time else "Gửi bù sau 08:00",
-                details=f"{photo_label} (File: {photo_file_id})" if photo_file_id else photo_label
+                details=""
             )
 
         reply = (
@@ -500,7 +500,6 @@ def handle_sup_webhook(data: dict):
             f"👤 SUP: <b>{sup_info['full_name']}</b>\n"
             f"📍 Địa điểm: <b>{location}</b>\n"
             f"⏰ Thời gian: <b>{now_hm}</b> ({status_label})\n"
-            f"📌 Ghi nhận: {photo_label}\n"
             f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Xem bảng theo dõi Check-in</a>"
         )
         send_gtalk_message(reply)
