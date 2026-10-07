@@ -2,7 +2,7 @@
 """
 Module: checkin_sup_bot.py
 Xử lý Điểm danh & Check-in đầu ngày dành cho SUP/AM Vùng NTB qua G-Talk Webhook.
-- Nhận tin nhắn / ảnh check-in TimestampCam từ Group G-Talk: 2095921878551764992
+- Nhận tin nhắn / ảnh check-in TimestampCam từ Group G-Talk: 2099483038556782592
 - Tự động phân tích SUP, kho/bưu cục, thời gian gửi và ghi vào Google Sheet
 - Nhắc nhở lúc 07:55 (trước 8h 5 phút)
 - Cảnh báo trễ & yêu cầu gửi bù lúc 08:00
@@ -35,7 +35,7 @@ def get_vn_today() -> date:
 
 # ─── CẤU HÌNH ───────────────────────────────────────────────
 GTALK_OA_TOKEN   = "2077276776281051136:8hMHvBBU8qXKps3mLPzgKBucPLSQPg3Y"
-GTALK_CHANNEL_ID = "2095921878551764992"
+GTALK_CHANNEL_ID = "2099483038556782592"
 GTALK_API_URL    = "https://mbff.ghn.vn/api/gtalk/send-message"
 
 SPREADSHEET_ID   = "1sR4bqfatBj7bI2KWzwAPDWeifsfg2FICOZYauuzqBeE"

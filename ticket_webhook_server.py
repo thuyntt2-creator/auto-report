@@ -51,7 +51,7 @@ except Exception:
 
 # ─── CẤU HÌNH ───────────────────────────────────────────────
 OA_TOKEN        = "2077276776281051136:8hMHvBBU8qXKps3mLPzgKBucPLSQPg3Y"
-TRIGGER_GROUPS   = ["2097277790030348288", "2097270568973508608", "2077278419534073856", "2095921878551764992"]   # Group nhận tin nhắn → trigger bắn sang các AM
+TRIGGER_GROUPS   = ["2097277790030348288", "2097270568973508608", "2077278419534073856", "2099483038556782592", "2095921878551764992"]   # Group nhận tin nhắn → trigger bắn sang các AM
 STATIC_DOMAIN    = "spring-provoke-valley.ngrok-free.dev"
 SPREADSHEET_ID  = "1MtbZBgRFwCWj6uQKsSqddiJ2GsTiEvKxRIPSshDa5PM"
 SHEET_TAB       = "ticket"
@@ -666,7 +666,7 @@ def webhook():
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
     # ─── 0. KIỂM TRA GROUP CHECK-IN SUP (2095921878551764992) ────────
-    if channel_id == "2095921878551764992":
+    if channel_id in ["2099483038556782592", "2095921878551764992"]:
         try:
             from checkin_sup_bot import handle_sup_webhook
             res_sup = handle_sup_webhook(data)
