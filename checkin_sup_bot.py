@@ -231,6 +231,61 @@ def send_gtalk_message(text: str, channel_id: str = GTALK_CHANNEL_ID, oa_token: 
     except Exception as e:
         return False, str(e)
 
+# ─── PARSE PAYLOAD TIN NHẮN & ẢNH GTALK ─────────────────────
+
+def parse_gtalk_message_payload(data: dict):
+    """
+    Trích xuất text/caption và ảnh đính kèm từ payload Webhook GTalk.
+    GTalk gửi ảnh theo cấu trúc JSON:
+    {"caption": "...", "items": [{"image": {"fileId": "...", "width": 720, "height": 1280}}]}
+    """
+    msg_obj = data.get("message") or {}
+    content_raw = data.get("content") or msg_obj.get("content") or {}
+    
+    content_dict = {}
+    if isinstance(content_raw, dict):
+        content_dict = content_raw
+    elif isinstance(content_raw, str):
+        try:
+            parsed = json.loads(content_raw)
+            if isinstance(parsed, dict):
+                content_dict = parsed
+        except Exception:
+            pass
+            
+    text = ""
+    if content_dict.get("caption"):
+        text = str(content_dict["caption"]).strip()
+    elif content_dict.get("text"):
+        text = str(content_dict["text"]).strip()
+    elif isinstance(content_raw, str) and not content_dict:
+        text = content_raw.strip()
+    elif data.get("text"):
+        text = str(data["text"]).strip()
+
+    has_photo = False
+    photo_file_id = ""
+    items = content_dict.get("items") or []
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict):
+                img = item.get("image") or item.get("photo") or item.get("file")
+                if img:
+                    has_photo = True
+                    if isinstance(img, dict) and img.get("fileId"):
+                        photo_file_id = str(img["fileId"])
+                    elif isinstance(img, str):
+                        photo_file_id = img
+
+    if not has_photo:
+        content_type = str(data.get("contentType") or msg_obj.get("contentType") or "").lower()
+        if "image" in content_type or "photo" in content_type or "file" in content_type:
+            has_photo = True
+        elif "image" in str(data) or "fileId" in str(data):
+            has_photo = True
+
+    return text, has_photo, photo_file_id
+
 # ─── NHẬN DIỆN SUP & NỘI DUNG CHECK-IN ───────────────────────
 
 def remove_accents(input_str: str) -> str:
@@ -370,21 +425,8 @@ def handle_sup_webhook(data: dict):
     sender_obj = data.get("sender") or {}
     sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
 
-    # Trích xuất text
-    msg_obj = data.get("message") or {}
-    content_obj = data.get("content") or msg_obj.get("content") or {}
-    text = ""
-    if isinstance(content_obj, dict):
-        text = content_obj.get("text", "")
-    elif isinstance(content_obj, str):
-        text = content_obj
-
-    if not text:
-        text = str(data.get("text") or msg_obj.get("text") or "")
-
-    # Kiểm tra có đính kèm ảnh không
-    content_type = str(data.get("contentType") or msg_obj.get("contentType") or "").lower()
-    has_photo = bool("image" in content_type or "photo" in content_type or "attachment" in str(data))
+    # Trích xuất caption text và ảnh
+    text, has_photo, photo_file_id = parse_gtalk_message_payload(data)
 
     norm_txt = remove_accents(text)
 
@@ -437,7 +479,7 @@ def handle_sup_webhook(data: dict):
     cutoff_time = now.replace(hour=8, minute=0, second=59, microsecond=0)
     is_on_time = (now <= cutoff_time)
     status_label = "✅ Đúng giờ" if is_on_time else "⚠️ Gửi bù (Trễ)"
-    photo_label = "📷 Có ảnh TimestampCam" if has_photo else "📝 Gửi text"
+    photo_label = "📷 Có ảnh TimestampCam" if has_photo else "📝 Gửi text (Chưa đính kèm ảnh)"
 
     try:
         ws, records = get_today_records(today_display)
@@ -450,7 +492,7 @@ def handle_sup_webhook(data: dict):
                 checkin_time=now_hm,
                 location=location,
                 note="Đúng giờ" if is_on_time else "Gửi bù sau 08:00",
-                details=photo_label
+                details=f"{photo_label} (File: {photo_file_id})" if photo_file_id else photo_label
             )
 
         reply = (
