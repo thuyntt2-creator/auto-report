@@ -70,7 +70,7 @@ SUPS = {
         "provinces": ["Khánh Hòa", "Đắk Nông"],
         "primary_locations": ["Kho Trung Chuyển Khánh Hòa", "Kho Chuyển Tiếp Đắk Nông"],
         "aliases": ["nguyễn tiến lực", "nguyen tien luc", "tiến lực", "tien luc", "lực", "luc", "lucnt"],
-        "location_keywords": ["khánh hòa", "khanh hoa", "ktckh", "đắk nông", "dak nong", "dno", "kh", "dn"]
+        "location_keywords": ["khánh hòa", "khanh hoa", "ktckh", "kctkh", "đắk nông", "dak nong", "dno", "kh", "dn"]
     },
     "am_hoang_nm": {
         "id": "am_hoang_nm",
@@ -79,7 +79,7 @@ SUPS = {
         "provinces": ["Lâm Đồng"],
         "primary_locations": ["Kho Chuyển Tiếp Đức Trọng-Lâm Đồng", "Kho Chuyển Tiếp Bảo Lộc-Lâm Đồng"],
         "aliases": ["nguyễn minh hoàng", "nguyen minh hoang", "minh hoàng", "minh hoang", "hoàng", "hoang", "hoangnm"],
-        "location_keywords": ["đức trọng", "duc trong", "bảo lộc", "bao loc", "lâm đồng", "lam dong", "dt", "bl", "ldo"]
+        "location_keywords": ["đức trọng", "duc trong", "bảo lộc", "bao loc", "lâm đồng", "lam dong", "dt", "bl", "ldo", "kctdt", "kctbl"]
     },
     "am_khanh_nn": {
         "id": "am_khanh_nn",
@@ -88,7 +88,7 @@ SUPS = {
         "provinces": ["Bình Thuận"],
         "primary_locations": ["Kho Chuyển Tiếp Bình Thuận", "Bưu cục Bình Thuận"],
         "aliases": ["nguyễn ngọc khánh", "nguyen ngoc khanh", "ngọc khánh", "ngoc khanh", "khánh", "khanh", "khanhnn"],
-        "location_keywords": ["bình thuận", "binh thuan", "kctbt", "bt", "phan thiết", "phan thiet", "la gi", "hàm thuận", "ham thuan", "hàm tân", "ham tan", "tuy phong", "bắc bình", "bac binh"]
+        "location_keywords": ["bình thuận", "binh thuan", "kctbt", "ktcbt", "bt", "bthuận", "bthuan", "phan thiết", "phan thiet", "la gi", "hàm thuận", "ham thuan", "hàm tân", "ham tan", "tuy phong", "bắc bình", "bac binh"]
     }
 }
 
@@ -234,72 +234,128 @@ def send_gtalk_message(text: str, channel_id: str = GTALK_CHANNEL_ID, oa_token: 
 # ─── NHẬN DIỆN SUP & NỘI DUNG CHECK-IN ───────────────────────
 
 def remove_accents(input_str: str) -> str:
+    """Loại bỏ dấu tiếng Việt chuẩn xác (bao gồm cả chữ đ/Đ)."""
     if not input_str:
         return ""
+    input_str = input_str.replace('đ', 'd').replace('Đ', 'd')
     nfkd = unicodedata.normalize('NFKD', input_str)
     return ''.join([c for c in nfkd if not unicodedata.combining(c)]).lower()
 
+def detect_location(text: str, sup_info: dict = None) -> str:
+    """
+    Trích xuất kho hoặc bưu cục từ tin nhắn check-in.
+    Hỗ trợ toàn bộ biến thể viết tắt:
+    - KCT BT, KCT Bthuận, kct bình thuận, ktc bình thuận, kctbt, bt... -> Kho Chuyển Tiếp Bình Thuận
+    - KTC KH, KTCKH, kct kh, kho khánh hòa... -> Kho Trung Chuyển Khánh Hòa
+    - KCT DN, KCT DNO, kct đắk nông, dno... -> Kho Chuyển Tiếp Đắk Nông
+    - KCT DT, kct đức trọng... -> Kho Chuyển Tiếp Đức Trọng
+    - KCT BL, kct bảo lộc... -> Kho Chuyển Tiếp Bảo Lộc
+    - BC Phan Thiết, La Gi, Hàm Thuận Bắc, Hàm Tân...
+    """
+    norm_txt = remove_accents(text)
+
+    # 1. BÌNH THUẬN (KCT / KTC Bình Thuận & viết tắt: KCT BT, KCT Bthuận, kct bình thuận, ktc bình thuận, kctbt...)
+    if re.search(r'\b(kct|ktc|kho)\s*(bt|b\s*thuan|bthuan|binh\s*thuan)\b|\bkctbt\b|\bktcbt\b|\bbinh\s*thuan\b', norm_txt):
+        return "Kho Chuyển Tiếp Bình Thuận"
+
+    # 2. KHÁNH HÒA (KTC / KCT Khánh Hòa & viết tắt: KTC KH, KTCKH, kct kh, kho khánh hòa...)
+    if re.search(r'\b(ktc|kct|kho)\s*(kh|k\s*hoa|khoa|khanh\s*hoa)\b|\bktckh\b|\bkctkh\b|\bkhanh\s*hoa\b', norm_txt):
+        return "Kho Trung Chuyển Khánh Hòa"
+
+    # 3. ĐẮK NÔNG (KCT / KTC Đắk Nông & viết tắt: KCT DN, KCT DNO, kct đắk nông, dno...)
+    if re.search(r'\b(kct|ktc|kho)\s*(dn|dno|dak\s*nong|daknong)\b|\bkctdn\b|\bkctdno\b|\bdak\s*nong\b|\bdno\b', norm_txt):
+        return "Kho Chuyển Tiếp Đắk Nông"
+
+    # 4. ĐỨC TRỌNG (KCT / KTC Đức Trọng & viết tắt: KCT DT, kct đức trọng...)
+    if re.search(r'\b(kct|ktc|kho)\s*(dt|d\s*trong|duc\s*trong|ductrong)\b|\bkctdt\b|\bduc\s*trong\b', norm_txt):
+        return "Kho Chuyển Tiếp Đức Trọng"
+
+    # 5. BẢO LỘC (KCT / KTC Bảo Lộc & viết tắt: KCT BL, kct bảo lộc...)
+    if re.search(r'\b(kct|ktc|kho)\s*(bl|b\s*loc|bao\s*loc|baoloc)\b|\bkctbl\b|\bbao\s*loc\b', norm_txt):
+        return "Kho Chuyển Tiếp Bảo Lộc"
+
+    # 6. CÁC BƯU CỤC (SUP Khánh thường di chuyển qua các bưu cục Bình Thuận)
+    if re.search(r'\b(phan\s*thiet|pt)\b', norm_txt):
+        return "BC Phan Thiết"
+    if re.search(r'\b(la\s*gi|lagi)\b', norm_txt):
+        return "BC La Gi"
+    if re.search(r'\b(ham\s*thuan\s*bac|htb)\b', norm_txt):
+        return "BC Hàm Thuận Bắc"
+    if re.search(r'\b(ham\s*thuan\s*nam|htn)\b', norm_txt):
+        return "BC Hàm Thuận Nam"
+    if re.search(r'\b(ham\s*tan)\b', norm_txt):
+        return "BC Hàm Tân"
+    if re.search(r'\b(tuy\s*phong)\b', norm_txt):
+        return "BC Tuy Phong"
+    if re.search(r'\b(bac\s*binh)\b', norm_txt):
+        return "BC Bắc Bình"
+    if re.search(r'\b(tanh\s*linh)\b', norm_txt):
+        return "BC Tánh Linh"
+    if re.search(r'\b(duc\s*linh)\b', norm_txt):
+        return "BC Đức Linh"
+    if re.search(r'\b(phu\s*quy)\b', norm_txt):
+        return "BC Phú Quý"
+
+    # 7. Nhận diện dạng 'BC <Tên>' hoặc 'Bưu cục <Tên>'
+    bc_match = re.search(r'(?i)\b(?:bc|bưu\s*cục)\s+([^\n\r,\:\;]+)', text)
+    if bc_match:
+        name_clean = bc_match.group(1).strip()
+        return f"BC {name_clean.title()}"
+
+    # 8. Nếu có text sau từ checkin mà chưa khớp các từ trên
+    clean = re.sub(r'(?i)#?checkin|#?check\s*in|diem\s*danh|gui\s*checkin', '', text).strip()
+    clean = re.sub(r'^[\s\-\:\,\.]+', '', clean).strip()
+    if len(clean) > 2 and not any(kw in clean.lower() for kw in ["sup", "chup", "anh", "hinh", "camera", "gui"]):
+        return clean
+
+    # Mặc định lấy kho chính đầu tiên của SUP nếu có
+    if sup_info and sup_info.get("primary_locations"):
+        return sup_info["primary_locations"][0]
+
+    return "Kho Chuyển Tiếp Bình Thuận"
+
 def detect_target_sup(sender_name: str, text: str):
-    """Nhận diện SUP nào dựa trên tên người gửi và nội dung tin nhắn."""
+    """
+    Nhận diện SUP nào dựa trên:
+    1. Tên người gửi trên GTalk (Display Name)
+    2. Tên SUP được nhắc tới trong text
+    3. Kho / Bưu cục / Địa bàn được nhắc tới trong text
+    """
     norm_sender = remove_accents(sender_name)
     norm_text = remove_accents(text)
 
     # 1. So khớp người gửi trước (Display Name trên GTalk)
     for s_id, s_info in SUPS.items():
         for alias in s_info["aliases"]:
+            if alias == "khanh" and "khanh hoa" in norm_sender and "ngoc khanh" not in norm_sender:
+                continue
             if remove_accents(alias) in norm_sender:
                 return s_id, s_info
 
+    # Chuẩn bị text đã loại bỏ chữ 'khanh hoa' để tránh nhận nhầm sang SUP Khánh
+    text_no_kh = re.sub(r'\bkhanh\s*hoa\b', ' ', norm_text)
+
     # 2. So khớp từ khóa tên SUP trong text (ví dụ: 'SUP Khánh gửi checkin...', 'Khánh checkin')
     for s_id, s_info in SUPS.items():
+        target_t = text_no_kh if s_id == "am_khanh_nn" else norm_text
         for alias in s_info["aliases"]:
-            if re.search(r'\b' + re.escape(remove_accents(alias)) + r'\b', norm_text):
+            if re.search(r'\b' + re.escape(remove_accents(alias)) + r'\b', target_t):
                 return s_id, s_info
 
-    # 3. So khớp từ khóa kho đặc trưng của SUP
-    for s_id, s_info in SUPS.items():
-        for loc_kw in s_info["location_keywords"]:
-            if re.search(r'\b' + re.escape(remove_accents(loc_kw)) + r'\b', norm_text):
-                return s_id, s_info
+    # 3. So khớp theo kho/địa bàn đặc thù trong text:
+    # Khánh Hòa / Đắk Nông -> SUP Lực (ưu tiên check trước để không lẫn chữ 'khánh')
+    if re.search(r'\b(ktc|kct|kho)\s*(kh|khanh\s*hoa)\b|\bktckh\b|\bkctkh\b|\bkhanh\s*hoa\b|\b(kct|ktc|kho)\s*(dn|dno|dak\s*nong)\b|\bkctdn\b|\bkctdno\b|\bdak\s*nong\b|\bdno\b', norm_text):
+        return "am_luc_nt", SUPS["am_luc_nt"]
+
+    # Bình Thuận / Phan Thiết / La Gi -> SUP Khánh
+    if re.search(r'\b(kct|ktc|kho)\s*(bt|b\s*thuan|bthuan|binh\s*thuan)\b|\bkctbt\b|\bktcbt\b|\bbinh\s*thuan\b|\bphan\s*thiet\b|\bla\s*gi\b|\blagi\b|\bham\s*thuan\b|\bham\s*tan\b|\btuy\s*phong\b|\bbac\s*binh\b', norm_text):
+        return "am_khanh_nn", SUPS["am_khanh_nn"]
+
+    # Đức Trọng / Bảo Lộc / Lâm Đồng -> SUP Hoàng
+    if re.search(r'\b(kct|ktc|kho)\s*(dt|duc\s*trong)\b|\bkctdt\b|\bduc\s*trong\b|\b(kct|ktc|kho)\s*(bl|bao\s*loc)\b|\bkctbl\b|\bbao\s*loc\b|\blam\s*dong\b', norm_text):
+        return "am_hoang_nm", SUPS["am_hoang_nm"]
 
     return None, None
-
-def detect_location(text: str, sup_info: dict) -> str:
-    """Trích xuất kho hoặc bưu cục từ tin nhắn check-in."""
-    norm_txt = remove_accents(text)
-
-    # Loại bỏ các từ khóa cú pháp
-    clean = re.sub(r'(?i)#?checkin|#?check\s*in|diem\s*danh|gui\s*checkin', '', text).strip()
-    clean = re.sub(r'^[\s\-\:\,\.]+', '', clean).strip()
-
-    # Nhận diện theo các bưu cục / kho đặc thù
-    if "phan thiet" in norm_txt:
-        return "BC Phan Thiết"
-    if "la gi" in norm_txt:
-        return "BC La Gi"
-    if "ham thuan bac" in norm_txt:
-        return "BC Hàm Thuận Bắc"
-    if "ham thuan nam" in norm_txt:
-        return "BC Hàm Thuận Nam"
-    if "ham tan" in norm_txt:
-        return "BC Hàm Tân"
-    if "duc trong" in norm_txt:
-        return "Kho Chuyển Tiếp Đức Trọng"
-    if "bao loc" in norm_txt:
-        return "Kho Chuyển Tiếp Bảo Lộc"
-    if "khanh hoa" in norm_txt or "ktckh" in norm_txt:
-        return "Kho Trung Chuyển Khánh Hòa"
-    if "dak nong" in norm_txt or "dno" in norm_txt:
-        return "Kho Chuyển Tiếp Đắk Nông"
-    if "binh thuan" in norm_txt or "kctbt" in norm_txt:
-        return "Kho Chuyển Tiếp Bình Thuận"
-
-    # Nếu clean còn text cụ thể (ví dụ: 'KCT Bình Thuận', 'BC Phan Rí')
-    if len(clean) > 2 and not any(kw in clean.lower() for kw in ["sup", "chup", "anh", "hinh", "camera"]):
-        return clean
-
-    # Mặc định lấy kho chính đầu tiên của SUP
-    return sup_info["primary_locations"][0]
 
 # ─── XỬ LÝ WEBHOOK TỪ GTALK ──────────────────────────────────
 
@@ -366,8 +422,8 @@ def handle_sup_webhook(data: dict):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    # ── 2. KIỂM TRA TIN CHECK-IN (Có từ khóa checkin hoặc gửi kèm ảnh) ──
-    is_checkin = bool(re.search(r'(?i)#?check\s*in|diem\s*danh|kct|ktc|buu\s*cuc', text) or has_photo)
+    # ── 2. KIỂM TRA TIN CHECK-IN (Có từ khóa checkin, kho/bưu cục hoặc gửi kèm ảnh) ──
+    is_checkin = bool(re.search(r'(?i)#?check\s*in|diem\s*danh|kct|ktc|buu\s*cuc|kho|bt|kh|dn|dt|bl|pt|la\s*gi', text) or has_photo)
     if not is_checkin:
         return {"status": "ignored", "reason": "not checkin message"}
 
