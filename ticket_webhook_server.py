@@ -394,12 +394,13 @@ def admin_fix_vu():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/fix_vu_m2", methods=["GET", "POST"])
+@app.route("/admin/fix_vu_m2", methods=["POST"])
 def admin_fix_vu_m2():
     try:
-        from diem_danh_bot import get_db, get_vn_today
+        from diem_danh_bot import get_db
         from sync_attendance_sheets import sync_daily_to_sheet, get_sheet_client, SPREADSHEET_ID, SHEET_TITLE
-        today_str = get_vn_today().strftime("%Y-%m-%d")
+        target_date_str = "2026-09-17"
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
         with get_db() as conn:
             cur = conn.cursor()
             cur.execute("""
@@ -411,11 +412,7 @@ def admin_fix_vu_m2():
                 late_minutes = 0,
                 penalty_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
-            """, (today_str,))
-            cur.execute("""
-            DELETE FROM attendance_records
-            WHERE date = ? AND am_id = 'am_vu_nln' AND milestone_id = 3
-            """, (today_str,))
+            """, (target_date_str,))
             conn.commit()
         try:
             gc = get_sheet_client()
@@ -429,12 +426,12 @@ def admin_fix_vu_m2():
                     break
         except Exception as e_sheet:
             print(f"Sheet cell reset error: {e_sheet}")
-        sync_daily_to_sheet(get_vn_today())
-        return jsonify({"status": "ok", "message": "Updated AM Vu M2 ON_TIME and removed M3 in SQLite and Google Sheet"})
+        sync_daily_to_sheet(target_date)
+        return jsonify({"status": "ok", "message": "Updated AM Vu M2 ON_TIME for 2026-09-17 in SQLite and Google Sheet"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/fix_thuy", methods=["GET", "POST"])
+@app.route("/admin/fix_thuy", methods=["POST"])
 def admin_fix_thuy():
     try:
         from diem_danh_bot import get_db, get_vn_today
@@ -450,7 +447,7 @@ def admin_fix_thuy():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/fix_loi_m2", methods=["GET", "POST"])
+@app.route("/admin/fix_loi_m2", methods=["POST"])
 def admin_fix_loi_m2():
     try:
         from diem_danh_bot import get_db, get_vn_today
@@ -488,7 +485,7 @@ def admin_fix_loi_m2():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/admin/fix_chi_m2", methods=["GET", "POST"])
+@app.route("/admin/fix_chi_m2", methods=["POST"])
 def admin_fix_chi_m2():
     try:
         from diem_danh_bot import get_db, get_vn_today
