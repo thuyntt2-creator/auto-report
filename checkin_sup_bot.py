@@ -434,29 +434,42 @@ def handle_sup_webhook(data: dict):
     if any(kw in text for kw in ["XÁC NHẬN CHECK-IN", "NHẮC NHỞ", "CẢNH BÁO 08:00", "BÁO CÁO CHECK-IN SUP"]):
         return {"status": "skipped", "reason": "bot message"}
 
-    # ── 1. KIỂM TRA TIN BÁO NGHỈ / CÔNG TÁC (#off, xin nghỉ, nghỉ phép) ──
-    is_excuse = bool(re.search(r'(?i)#?off\b|xin\s*nghi|nghi\s*phep|bao\s*vang|cong\s*tac|di\s*hop', text))
+    # ── 1. KIỂM TRA TIN BÁO NGHỈ / CÔNG TÁC / MIỄN CHECK-IN ──
+    is_excuse = bool(re.search(r'(?i)#?off\b|xin\s*nghi|nghi\s*phep|bao\s*vang|cong\s*tac|di\s*hop|xin\s*mien|mien\s*check\s*in', norm_txt))
     if is_excuse:
         sup_id, sup_info = detect_target_sup(sender_name, text)
         if not sup_id:
             return {"status": "ignored", "reason": "cannot identify sup for excuse"}
 
-        # Trích xuất lý do
-        reason = re.sub(r'(?i)#?off[:\s]*|xin\s*nghi[:\s]*|nghi\s*phep[:\s]*', '', text).strip()
-        if not reason:
-            reason = "Nghỉ phép / Công tác"
+        # Trích xuất lý do:
+        reason = ""
+        m_reason = re.search(r'(?i)(?:vì\s*lý\s*do|vi\s*ly\s*do|lý\s*do|ly\s*do)[:\s]+(.+)', text)
+        if m_reason:
+            reason = m_reason.group(1).strip()
+        else:
+            # Lọc bỏ các tiền tố xin phép và tên SUP để trích xuất lý do
+            cleaned = text
+            for alias in sup_info["aliases"]:
+                cleaned = re.sub(r'(?i)\b' + re.escape(alias) + r'\b', '', cleaned)
+            cleaned = re.sub(r'(?i)\b(am|sup)\b', '', cleaned)
+            cleaned = re.sub(r'(?i)#?off[:\s]*|xin\s*mi[eễ]n\s*check\s*in[:\s]*|mi[eễ]n\s*check\s*in[:\s]*|xin\s*ngh[iỉ]\s*ph[eé]p[:\s]*|xin\s*ngh[iỉ][:\s]*|ngh[iỉ]\s*ph[eé]p[:\s]*|b[aá]o\s*v[aắ]ng[:\s]*', '', cleaned)
+            cleaned = re.sub(r'^[\s\-\:\,\.]+', '', cleaned).strip()
+            reason = cleaned
+
+        if not reason or len(reason) < 2:
+            reason = "Xin miễn check-in / Nghỉ phép"
 
         try:
             ws, records = get_today_records(today_display)
             row_idx = records[sup_id]["row_idx"]
             if row_idx:
-                update_sup_record(ws, row_idx, status="🏖️ Nghỉ phép", note=reason, details=f"Báo lúc {now_hm}")
+                update_sup_record(ws, row_idx, status="🏖️ Miễn check-in", note=reason, details=f"Báo lúc {now_hm}")
 
             reply = (
-                f"📝 <b>XÁC NHẬN GHI NHẬN NGHỈ PHÉP</b>\n"
-                f"👤 SUP: <b>{sup_info['full_name']}</b>\n"
-                f"📌 Trạng thái: <b>🏖️ Nghỉ phép / Vắng</b>\n"
-                f"💬 Ghi chú: <i>{reason}</i>\n"
+                f"📝 <b>XÁC NHẬN MIỄN CHECK-IN / NGHỈ PHÉP</b>\n"
+                f"👤 AM/SUP: <b>{sup_info['full_name']}</b>\n"
+                f"📌 Trạng thái: <b>🏖️ Miễn check-in / Xin phép</b>\n"
+                f"💬 Lý do: <i>{reason}</i>\n"
                 f"⏰ Thời gian ghi nhận: {now_hm} - {today_display}"
             )
             send_gtalk_message(reply)
@@ -520,8 +533,8 @@ def job_remind_0755():
         missing_sups = []
         for s_id, rec in records.items():
             status = rec.get("status", "")
-            # Nếu chưa check-in và không phải nghỉ phép
-            if "Chưa check-in" in status and not any(kw in status for kw in ["Nghỉ", "Vắng", "Đúng giờ", "Gửi bù"]):
+            # Nếu chưa check-in và không phải nghỉ phép / miễn check-in
+            if "Chưa check-in" in status and not any(kw in status for kw in ["Nghỉ", "Vắng", "Đúng giờ", "Gửi bù", "Miễn"]):
                 missing_sups.append(rec["name"])
 
         if not missing_sups:
@@ -603,7 +616,7 @@ def job_recap_1100():
             note_str = rec.get("note", "")
 
             icon = "✅"
-            if "Nghỉ" in status or "Vắng" in status:
+            if "Nghỉ" in status or "Vắng" in status or "Miễn" in status:
                 icon = "🏖️"
             elif "Trễ" in status or "bù" in status:
                 icon = "⚠️"
