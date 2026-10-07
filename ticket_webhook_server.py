@@ -563,6 +563,32 @@ def trigger_cron_recap(m_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/cron/sup/<string:job_name>", methods=["GET", "POST"])
+def trigger_cron_sup(job_name):
+    try:
+        from checkin_sup_bot import job_remind_0755, job_cutoff_0800, job_recap_1100
+        if job_name in ("0755", "remind"):
+            job_remind_0755()
+            return jsonify({"status": "ok", "job": "0755 remind executed"})
+        elif job_name in ("0800", "cutoff"):
+            job_cutoff_0800()
+            return jsonify({"status": "ok", "job": "0800 cutoff executed"})
+        elif job_name in ("1100", "recap"):
+            job_recap_1100()
+            return jsonify({"status": "ok", "job": "1100 recap executed"})
+        return jsonify({"status": "error", "message": f"Unknown job {job_name}"}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/sup/status", methods=["GET"])
+def get_sup_status():
+    try:
+        from checkin_sup_bot import get_today_records
+        ws, recs = get_today_records()
+        return jsonify({"status": "ok", "records": recs})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/cron/daily", methods=["GET", "POST"])
 def trigger_cron_daily():
     try:
@@ -638,6 +664,17 @@ def webhook():
         return jsonify({"status": "skipped", "reason": f"not trigger group: {channel_id}"})
 
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
+
+    # ─── 0. KIỂM TRA GROUP CHECK-IN SUP (2095921878551764992) ────────
+    if channel_id == "2095921878551764992":
+        try:
+            from checkin_sup_bot import handle_sup_webhook
+            res_sup = handle_sup_webhook(data)
+            return jsonify(res_sup)
+        except Exception as e_sup:
+            print(f"[{ts}] [CHECKIN SUP ERROR]: {e_sup}")
+            return jsonify({"status": "error", "message": str(e_sup)})
+
 
     # ─── 1. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP / MIỄN BÁO CÁO ────────
     try:
@@ -876,6 +913,19 @@ def main():
         start_scheduler()
     except Exception as e:
         print(f"⚠️ Attendance scheduler error: {e}")
+
+    # Chạy SUP Check-in Scheduler (07:55, 08:00, 11:00)
+    def sup_scheduler_loop():
+        print("⏰ SUP Check-in Scheduler đã khởi động: Giám sát mốc 07:55, 08:00, 11:00...")
+        while True:
+            try:
+                from checkin_sup_bot import check_sup_schedule
+                check_sup_schedule()
+            except Exception as e_sup_sched:
+                pass
+            time.sleep(20)
+
+    threading.Thread(target=sup_scheduler_loop, daemon=True).start()
 
     # Chạy Self-Ping thread giữ Render luôn thức (chống Free Tier ngủ sau 15 phút)
     def keep_alive():
