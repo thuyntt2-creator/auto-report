@@ -607,10 +607,6 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
 
     # Gửi tin nhắn phản hồi xác nhận vào nhóm
     time_status_tag = "✅ Đúng hạn" if is_on_time else "⚠️ Báo trễ"
-    extra_note = ""
-    if now_dt.weekday() not in ACTIVE_WEEKDAYS:
-        extra_note = "\n<i>(🧪 Ghi nhận gửi mẫu thử nghiệm — Lịch điểm danh chính thức: Thứ 2, Thứ 4, Thứ 6)</i>"
-
     reply_msg = (
         f"✅ <b>XÁC NHẬN BÁO CÁO KAIZEN</b>\n"
         f"🏢 <b>Bưu cục:</b> {hub['hub_name']} (Mã: <code>{wid}</code>)\n"
@@ -620,7 +616,6 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
         f"📸 <b>Hình ảnh:</b> {photo_label}\n"
         f"📊 <b>Kết quả:</b> <b>{status_label}</b>\n"
         f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Xem bảng theo dõi KAIZEN</a>"
-        f"{extra_note}"
     )
     target_ch = channel_id or PROVINCE_GROUPS.get(hub['province']) or TEST_GROUP_ID
     send_gtalk_message(reply_msg, target_ch)
