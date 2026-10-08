@@ -47,15 +47,13 @@ GTALK_OA_TOKEN = "2077276776281051136:8hMHvBBU8qXKps3mLPzgKBucPLSQPg3Y"
 # Group ID test (hiện tại test cả 5 tỉnh vào group này)
 TEST_GROUP_ID = "2077278419534073856"
 
-# Cấu hình mapping 5 tỉnh tới Group ID:
-# Trong giai đoạn thử nghiệm: tất cả 5 tỉnh cùng trỏ vào TEST_GROUP_ID
-# Khi đưa vào vận hành chính thức: thay thế ID thật cho từng tỉnh tại đây
+# Cấu hình mapping 5 tỉnh tới Group ID chính thức:
 PROVINCE_GROUPS = {
-    "Khánh Hòa":  "2077278419534073856",
-    "Lâm Đồng":   "2077278419534073856",
-    "Đắk Nông":   "2077278419534073856",
-    "Bình Thuận": "2077278419534073856",
-    "Ninh Thuận": "2077278419534073856",
+    "Ninh Thuận": "2102572223276539904",
+    "Bình Thuận": "2102572259390967808",
+    "Đắk Nông":   "2102572112975503360",
+    "Lâm Đồng":   "2102572168718503936",
+    "Khánh Hòa":  "2101117815083507712",
 }
 
 # Google Sheets Configuration
@@ -606,7 +604,8 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
         f"📊 <b>Kết quả:</b> <b>{status_label}</b>\n"
         f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Xem bảng theo dõi KAIZEN</a>"
     )
-    send_gtalk_message(reply_msg, channel_id)
+    target_ch = channel_id or PROVINCE_GROUPS.get(hub['province']) or TEST_GROUP_ID
+    send_gtalk_message(reply_msg, target_ch)
 
     return {
         "status": "success",
