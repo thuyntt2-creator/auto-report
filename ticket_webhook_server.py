@@ -674,8 +674,7 @@ def webhook():
         if r"C:\Users\lap4all\Documents\Auto report" not in sys.path:
             sys.path.insert(0, r"C:\Users\lap4all\Documents\Auto report")
         from kaizen_bot import handle_kaizen_webhook
-        # res_kz = handle_kaizen_webhook(data)
-        res_kz = None
+        res_kz = handle_kaizen_webhook(data)
         if res_kz and res_kz.get("status") == "success":
             print(f"[{ts}] 🎯 [KAIZEN CHECKIN]: Ghi nhận thành công bưu cục {res_kz.get('hub')} ({res_kz.get('wid')}) - {res_kz.get('status_label')}")
             return jsonify(res_kz)

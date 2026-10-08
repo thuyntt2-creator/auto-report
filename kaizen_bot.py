@@ -487,8 +487,24 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
     ]):
         return {"status": "skipped", "reason": "bot message"}
 
-    # Luôn tiếp nhận và phản hồi khi có người gửi báo cáo (kể cả gửi làm mẫu hôm nay)
+    # ── ĐIỀU KIỆN TIÊN QUYẾT: Bắt buộc tin nhắn phải có kèm hình ảnh (image_count > 0)
+    # Tin nhắn chat chữ thảo luận công việc bình thường tuyệt đối bỏ qua để không làm phiền
+    if image_count == 0:
+        return {"status": "skipped", "reason": "no_image_in_message"}
+
+    # Tải danh mục cơ cấu
     cocau = load_cocau_data()
+
+    # ── LỌC THEO TỈNH CỦA GROUP: Group tỉnh nào chỉ nhận diện bưu cục tỉnh đó
+    channel_province = None
+    for prov, gid in PROVINCE_GROUPS.items():
+        if gid == str(channel_id):
+            channel_province = prov
+            break
+
+    if channel_province:
+        cocau = [h for h in cocau if h["province"] == channel_province]
+
     hub = detect_hub(text, sender_name, cocau)
 
     if not hub:
