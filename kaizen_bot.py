@@ -135,10 +135,36 @@ def remove_accents(input_str: str) -> str:
     return ''.join([c for c in nfkd if not unicodedata.combining(c)]).lower()
 
 def clean_hub_name(name: str) -> str:
-    """Loại bỏ các tiền tố mã tỉnh như (NTH), (DNO), (KHA), Kho, Bưu cục để so khớp linh hoạt."""
-    cleaned = re.sub(r'\([A-Z]{2,4}\)', '', name, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\b(kho trung chuyen|kho chuyen tiep|kho|buu cuc|bc|kct|ktc)\b', '', cleaned, flags=re.IGNORECASE)
+    """Loại bỏ các tiền tố mã tỉnh như (NTH), (DNO), (KHA) hoặc tiền tố kho ở ĐẦU tên."""
+    cleaned = re.sub(r'^\s*\([A-Z]{2,4}\)\s*', '', name, flags=re.IGNORECASE)
+    cleaned = re.sub(r'^\s*(kho trung chuyen|kho chuyen tiep|kho|buu cuc|bc|kct|ktc)\s+', '', cleaned, flags=re.IGNORECASE)
     return cleaned.strip()
+
+def is_conversational_message(text: str) -> bool:
+    """
+    Kiểm tra xem tin nhắn có phải là đàm thoại, phàn nàn, trao đổi công việc hay không.
+    Ví dụ: 'cam lâm 2 dơ vậy sếp ơi', 'từ chối đóng kho', 'hôm nay cam lâm 2 bận quá'...
+    Nếu là đàm thoại thì tuyệt đối không được nhận diện nhầm làm báo cáo check-in KAIZEN.
+    """
+    if not text:
+        return False
+    norm = remove_accents(text).lower()
+    
+    chat_keywords = [
+        "sep", "do vay", "ban vay", "do the", "ban the", "do qua", "ban qua", "do lam", "ban lam",
+        "tai sao", "sao lai", "sao chua", "chua don", "ve sinh do", "ve sinh ban", "nhac nho",
+        "phe binh", "tu choi", "yeu cau dong", "xin dong kho", "chua dong kho", "mo kho", "kiem tra",
+        "check lai", "chup lai", "gui lai", "chua dat", "khong dat", "ho tro", "giup voi", "alo",
+        "anh oi", "chi oi", "em oi", "sep oi"
+    ]
+    for kw in chat_keywords:
+        if kw in norm:
+            return True
+            
+    words = norm.split()
+    if len(words) > 8 and not any(k in norm for k in ["kaizen", "diem danh", "bao cao"]):
+        return True
+    return False
 
 # ─── MASTER DATA CƠ CẤU ──────────────────────────────────────
 _CACHED_COCAU = None
@@ -399,18 +425,22 @@ def parse_gtalk_message_payload(data: dict):
 def detect_hub(text: str, sender_name: str, cocau_list: list):
     """
     Nhận diện bưu cục từ tin nhắn:
-    1. Ưu tiên so khớp số warehouse_id (4 đến 9 chữ số) xuất hiện trong text.
-    2. Nếu người gửi là AM, ưu tiên so khớp các bưu cục do chính AM đó quản lý.
-    3. So khớp tên bưu cục / bưu cục alias không dấu (longest match).
+    1. ƯU TIÊN 1: So khớp mã số bưu cục (warehouse_id: 4 đến 9 chữ số) xuất hiện trong text.
+       (Ví dụ: '22793000', '22793000-(KHO) Diên Thọ' -> Khớp 100%).
+    2. Nếu KHÔNG có mã số bưu cục:
+       - Kiểm tra xem tin nhắn có phải đàm thoại / phàn nàn không (is_conversational_message).
+         Nếu có từ chê bẩn/phàn nàn/trao đổi -> BỎ QUA NGAY 100%, không bắt nhầm.
+       - So khớp FULL TÊN BƯU CỤC chính thức (ví dụ: '(KHO) Cam Lâm 2', '(KHA) Vĩnh Hải', '(BTH) Đồng Kho'...).
+       - So khớp TIỀN TỐ BƯU CỤC rõ ràng (ví dụ: 'Kho Cam Lâm 2', 'BC Cam Lâm 2', 'Bưu cục Cam Lâm 2', 'KAIZEN Cam Lâm 2').
+       - So khớp TIN NHẮN CHECK-IN NGẮN GỌN (chỉ vỏn vẹn tên bưu cục <= 30 ký tự, ví dụ: 'Cam Lâm 2', 'Diên Thọ').
     """
     if not text:
-        # Nếu chỉ có ảnh không có text, thử xem người gửi có phải AM quản lý duy nhất 1 BC không
         return None
 
-    norm_text = remove_accents(text)
-    norm_sender = remove_accents(sender_name)
+    norm_text = remove_accents(text).strip()
+    norm_sender = remove_accents(sender_name).strip()
 
-    # 1. So khớp mã warehouse_id chính xác
+    # 1. So khớp mã warehouse_id chính xác (ưu tiên cao nhất và an toàn nhất)
     wid_matches = re.findall(r'\b(\d{4,9})\b', text)
     if wid_matches:
         cocau_by_wid = {h["warehouse_id"]: h for h in cocau_list}
@@ -418,27 +448,52 @@ def detect_hub(text: str, sender_name: str, cocau_list: list):
             if candidate_wid in cocau_by_wid:
                 return cocau_by_wid[candidate_wid]
 
-    # 2. Xác định xem người gửi có phải AM nào trong danh sách không
+    # 2. Nếu không có mã số bưu cục:
+    # Nếu câu là đàm thoại / phàn nàn / chê dơ / chat việc -> BỎ QUA NGAY 100%
+    if is_conversational_message(text):
+        return None
+
+    # Xác định pool tìm kiếm (ưu tiên AM nếu có)
     sender_hubs = []
     for h in cocau_list:
         if h["norm_am"] and h["norm_am"] in norm_sender:
             sender_hubs.append(h)
 
-    # Nếu sender là AM, ưu tiên so khớp tên bưu cục của AM đó trước
     search_pools = [sender_hubs, cocau_list] if sender_hubs else [cocau_list]
 
     for pool in search_pools:
         # Sắp xếp các bưu cục theo độ dài từ khóa giảm dần (longest keyword match)
-        candidates = sorted(pool, key=lambda x: len(x["norm_name"]), reverse=True)
+        candidates = sorted(pool, key=lambda x: len(x["norm_full"]), reverse=True)
+        
+        # 2.1 So khớp FULL TÊN BƯU CỤC chính thức (có mã tỉnh / kho trong ngoặc)
+        # Ví dụ: '(KHO) Cam Lâm 2', '(kho) cam lam 2', '[kho] cam lam 2'
         for h in candidates:
-            # So khớp theo clean_name (ví dụ: 'thuan nam', 'duc trong', 'phan rang'...)
-            if len(h["norm_name"]) >= 3:
-                pattern = r'\b' + re.escape(h["norm_name"]) + r'\b'
-                if re.search(pattern, norm_text):
-                    return h
-            # So khớp theo norm_full nếu có cả tiền tố
             if len(h["norm_full"]) >= 5 and h["norm_full"] in norm_text:
                 return h
+
+        # 2.2 So khớp TIỀN TỐ RÕ RÀNG (Kho ..., BC ..., Bưu cục ...)
+        for h in candidates:
+            clean_n = h["norm_name"]
+            if len(clean_n) >= 3:
+                prefix_patterns = [
+                    r'\bkho\s+' + re.escape(clean_n) + r'\b',
+                    r'\bbc\s+' + re.escape(clean_n) + r'\b',
+                    r'\bbuu cuc\s+' + re.escape(clean_n) + r'\b',
+                    r'\bkaizen\s+' + re.escape(clean_n) + r'\b',
+                ]
+                for pat in prefix_patterns:
+                    if re.search(pat, norm_text):
+                        return h
+
+        # 2.3 So khớp TIN NHẮN CHECK-IN NGẮN GỌN (Chỉ gửi vỏn vẹn tên bưu cục <= 30 ký tự)
+        # Ví dụ người dùng chỉ gõ 'Cam Lâm 2', 'Diên Thọ', 'Diên Thọ ca 1'
+        if len(norm_text) <= 30:
+            for h in candidates:
+                clean_n = h["norm_name"]
+                if len(clean_n) >= 3:
+                    pattern = r'\b' + re.escape(clean_n) + r'\b'
+                    if re.search(pattern, norm_text):
+                        return h
 
     return None
 
