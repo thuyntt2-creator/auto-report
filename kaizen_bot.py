@@ -63,6 +63,11 @@ SPREADSHEET_ID  = "1nIHWPNn75j8x6-SGzCR9i_e8CPyrWHy65J-FDV0w-14"
 COCAU_TAB_NAME  = "Cơ cấu"
 LOG_TAB_NAME    = "Điểm danh KAIZEN"
 
+# Danh sách bưu cục/kho tạm thời MIỄN BÁO CÁO KAIZEN
+EXCLUDED_WAREHOUSE_IDS = {
+    "23098000": "Dùng chung mặt bằng với Kho Trung Chuyển Khánh Hòa (1909)",
+}
+
 # Lịch trình & Ca làm việc
 # 0 = Thứ 2, 2 = Thứ 4, 4 = Thứ 6
 ACTIVE_WEEKDAYS = [0, 2, 4]
@@ -165,6 +170,10 @@ def load_cocau_data(force_reload=False):
             name = str(r[1]).strip()
             prov = str(r[2]).strip()
             am = str(r[3]).strip()
+
+            # Bỏ qua các kho tạm thời miễn báo cáo (ví dụ: CK Diên Điền dùng chung KTC Khánh Hòa)
+            if wid in EXCLUDED_WAREHOUSE_IDS:
+                continue
             
             # Chuẩn hóa trường hợp dòng đặc thù Nhân Cơ 1
             if "(DNO)" in name and (prov == "(DNO) Nhân Cơ 1" or not prov):
@@ -488,8 +497,20 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
     hub = detect_hub(text, sender_name, cocau)
 
     if not hub:
+        wid_matches = re.findall(r'\b(\d{3,10})\b', text)
+        norm_t = remove_accents(text)
+
+        # Kiểm tra nếu gửi báo cáo cho kho đang tạm thời được miễn (ví dụ: CK Diên Điền)
+        for ex_wid, ex_reason in EXCLUDED_WAREHOUSE_IDS.items():
+            if (ex_wid in wid_matches) or (ex_wid in text) or ("dien dien" in norm_t and "ck" in norm_t):
+                reply_ex = (
+                    f"ℹ️ <b>THÔNG BÁO MIỄN BÁO CÁO KAIZEN:</b>\n"
+                    f"Bưu cục/Kho <b>(KHO) CK Diên Điền (23098000)</b> hiện dùng chung mặt bằng với <b>Kho Trung Chuyển Khánh Hòa (1909)</b> nên tạm thời được miễn báo cáo riêng."
+                )
+                send_gtalk_message(reply_ex, channel_id)
+                return {"status": "excluded_hub", "wid": ex_wid, "reason": ex_reason}
+
         # Nếu có gửi ảnh kèm số nhưng không khớp warehouse_id
-        wid_matches = re.findall(r'\b(\d{4,9})\b', text)
         if wid_matches and image_count > 0:
             reply_err = (
                 f"⚠️ <b>LƯU Ý ĐIỂM DANH KAIZEN:</b>\n"
