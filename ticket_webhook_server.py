@@ -662,6 +662,18 @@ def webhook():
 
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
+    # ─── 0.1 KIỂM TRA BÁO CÁO KAIZEN ĐIỂM DANH (CÚ PHÁP: ID/TÊN BC + ẢNH) ───
+    try:
+        if r"C:\Users\lap4all\Documents\Auto report" not in sys.path:
+            sys.path.insert(0, r"C:\Users\lap4all\Documents\Auto report")
+        from kaizen_bot import handle_kaizen_webhook
+        res_kz = handle_kaizen_webhook(data)
+        if res_kz and res_kz.get("status") == "success":
+            print(f"[{ts}] 🎯 [KAIZEN CHECKIN]: Ghi nhận thành công bưu cục {res_kz.get('hub')} ({res_kz.get('wid')}) - {res_kz.get('status_label')}")
+            return jsonify(res_kz)
+    except Exception as e_kz:
+        print(f"[{ts}] [KAIZEN WEBHOOK ERROR]: {e_kz}")
+
     # ─── 0. KIỂM TRA GROUP CHECK-IN SUP (2095921878551764992) ────────
     if channel_id in ["2099483038556782592", "2095921878551764992"]:
         try:
@@ -910,6 +922,21 @@ def main():
         start_scheduler()
     except Exception as e:
         print(f"⚠️ Attendance scheduler error: {e}")
+
+    # Chạy KAIZEN Attendance Scheduler (09:55, 10:05, 21:55, 22:05)
+    def kaizen_scheduler_loop():
+        print("⏰ KAIZEN Attendance Scheduler đã khởi động: Giám sát mốc 09:55, 10:05, 21:55, 22:05 (T2, T4, T6)...")
+        while True:
+            try:
+                if r"C:\Users\lap4all\Documents\Auto report" not in sys.path:
+                    sys.path.insert(0, r"C:\Users\lap4all\Documents\Auto report")
+                from kaizen_bot import check_kaizen_schedule
+                check_kaizen_schedule()
+            except Exception as e_kz_sched:
+                pass
+            time.sleep(20)
+
+    threading.Thread(target=kaizen_scheduler_loop, daemon=True).start()
 
     # Chạy SUP Check-in Scheduler (07:55, 08:00, 11:00)
     def sup_scheduler_loop():
