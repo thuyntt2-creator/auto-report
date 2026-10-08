@@ -670,16 +670,16 @@ def webhook():
     print(f"[{ts}] TEXT ĐẬP VÀO GROUP {channel_id}:\n{msg_text[:300]}")
 
     # ─── 0.1 KIỂM TRA BÁO CÁO KAIZEN ĐIỂM DANH (CÚ PHÁP: ID/TÊN BC + ẢNH) ───
-    try:
-        if r"C:\Users\lap4all\Documents\Auto report" not in sys.path:
-            sys.path.insert(0, r"C:\Users\lap4all\Documents\Auto report")
-        from kaizen_bot import handle_kaizen_webhook
-        res_kz = handle_kaizen_webhook(data)
-        if res_kz and res_kz.get("status") == "success":
-            print(f"[{ts}] 🎯 [KAIZEN CHECKIN]: Ghi nhận thành công bưu cục {res_kz.get('hub')} ({res_kz.get('wid')}) - {res_kz.get('status_label')}")
-            return jsonify(res_kz)
-    except Exception as e_kz:
-        print(f"[{ts}] [KAIZEN WEBHOOK ERROR]: {e_kz}")
+    if channel_id in KAIZEN_GROUPS:
+        try:
+            from kaizen_bot import handle_kaizen_webhook
+            res_kz = handle_kaizen_webhook(data)
+            if res_kz and res_kz.get("status") == "success":
+                print(f"[{ts}] 🎯 [KAIZEN CHECKIN]: Ghi nhận thành công bưu cục {res_kz.get('hub')} ({res_kz.get('wid')}) - {res_kz.get('status_label')}")
+            return jsonify(res_kz or {"status": "ignored"})
+        except Exception as e_kz:
+            print(f"[{ts}] [KAIZEN WEBHOOK ERROR]: {e_kz}")
+            return jsonify({"status": "error", "message": str(e_kz)})
 
     # ─── 0. KIỂM TRA GROUP CHECK-IN SUP (2095921878551764992) ────────
     if channel_id in ["2099483038556782592", "2095921878551764992"]:
