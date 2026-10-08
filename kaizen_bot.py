@@ -69,9 +69,9 @@ EXCLUDED_WAREHOUSE_IDS = {
 }
 
 # Lịch trình & Ca làm việc
-# 0 = Thứ 2, 2 = Thứ 4, 4 = Thứ 6
+# 0 = Thứ 2, 2 = Thứ 4, 4 = Thứ 6 hàng tuần
 ACTIVE_WEEKDAYS = [0, 2, 4]
-TEST_EVERYDAY   = True   # Cho phép nhận điểm danh mọi ngày trong giai đoạn test
+TEST_EVERYDAY   = False  # Chỉ kích hoạt tự động vào đúng Thứ 2, Thứ 4, Thứ 6 hàng tuần
 
 # Giờ mốc quy định
 MORNING_CUTOFF_HOUR = 10
