@@ -487,10 +487,7 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
     ]):
         return {"status": "skipped", "reason": "bot message"}
 
-    # Kiểm tra ngày trong tuần (chỉ thứ 2, 4, 6 trừ khi TEST_EVERYDAY=True)
-    if not TEST_EVERYDAY and now_dt.weekday() not in ACTIVE_WEEKDAYS:
-        return {"status": "skipped", "reason": f"not active weekday (weekday={now_dt.weekday()})"}
-
+    # Luôn tiếp nhận và phản hồi khi có người gửi báo cáo (kể cả gửi làm mẫu hôm nay)
     cocau = load_cocau_data()
     hub = detect_hub(text, sender_name, cocau)
 
