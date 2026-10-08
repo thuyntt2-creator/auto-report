@@ -576,11 +576,24 @@ def process_checkin_message(parsed_msg: dict, now_dt: datetime = None):
                 send_gtalk_message(reply_ex, channel_id)
                 return {"status": "excluded_hub", "wid": ex_wid, "reason": ex_reason}
 
-        # Nếu có gửi ảnh kèm số nhưng không khớp warehouse_id
+        # Nếu có gửi ảnh kèm số nhưng không khớp trong tỉnh này
         if wid_matches and image_count > 0:
+            full_cocau = load_cocau_data()
+            other_prov_hub = next((h for h in full_cocau if h["warehouse_id"] == wid_matches[0]), None)
+            
+            if other_prov_hub and channel_province and other_prov_hub["province"] != channel_province:
+                reply_prov = (
+                    f"⚠️ <b>GỬI NHẦM NHÓM KAIZEN:</b>\n"
+                    f"Bưu cục <b>{other_prov_hub['hub_name']}</b> (Mã: <code>{other_prov_hub['warehouse_id']}</code>) "
+                    f"thuộc <b>Tỉnh {other_prov_hub['province']}</b>, không thuộc nhóm <b>Tỉnh {channel_province}</b>.\n"
+                    f"👉 Vui lòng gửi báo cáo vào đúng nhóm <b>KAIZEN {other_prov_hub['province'].upper()}</b>."
+                )
+                send_gtalk_message(reply_prov, channel_id)
+                return {"status": "error", "reason": "wrong_province", "wid": wid_matches[0], "hub": other_prov_hub["hub_name"]}
+
             reply_err = (
                 f"⚠️ <b>LƯU Ý ĐIỂM DANH KAIZEN:</b>\n"
-                f"Mã kho/bưu cục <b>{wid_matches[0]}</b> không tồn tại trong danh sách Cơ cấu Vùng NTB.\n"
+                f"Mã kho/bưu cục <b>{wid_matches[0]}</b> không tồn tại trong danh mục 92 bưu cục Vùng NTB.\n"
                 f"Vui lòng kiểm tra lại mã warehouse_id hoặc cú pháp gửi."
             )
             send_gtalk_message(reply_err, channel_id)
