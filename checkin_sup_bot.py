@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Module: checkin_sup_bot.py
-Xử lý Điểm danh & Check-in đầu ngày dành cho SUP/AM Vùng NTB qua G-Talk Webhook.
+Xử lý Điểm danh & Check-in đầu ngày dành cho SUP/AM và HR Vùng NTB qua G-Talk Webhook.
 - Nhận tin nhắn / ảnh check-in TimestampCam từ Group G-Talk: 2099483038556782592
-- Tự động phân tích SUP, kho/bưu cục, thời gian gửi và ghi vào Google Sheet
+- Tự động phân tích nhân sự (3 SUP/AM + 6 HR), kho/bưu cục (tra cứu từ tab Cơ cấu), thời gian gửi và ghi vào Google Sheet
 - Nhắc nhở lúc 07:55 (trước 8h 5 phút)
 - Cảnh báo trễ & yêu cầu gửi bù lúc 08:00
-- Báo cáo tổng hợp lúc 11:00
-- Hỗ trợ xin nghỉ phép qua cú pháp #off hoặc tick tay trực tiếp trên Google Sheet.
+- Báo cáo tổng hợp lúc 11:00 (chia rõ nhóm SUP/AM và nhóm HR)
+- Hỗ trợ xin miễn check-in / nghỉ phép theo cú pháp "AM/SUP/HR [Tên] xin miễn check in vì lý do..." hoặc tick tay trực tiếp trên Google Sheet.
 """
 
 import os
@@ -40,6 +40,7 @@ GTALK_API_URL    = "https://mbff.ghn.vn/api/gtalk/send-message"
 
 SPREADSHEET_ID   = "1sR4bqfatBj7bI2KWzwAPDWeifsfg2FICOZYauuzqBeE"
 SHEET_TAB_NAME   = "Sheet1"
+SHEET_COCAU_TAB  = "Cơ cấu"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCOPES = [
@@ -61,36 +62,96 @@ SERVICE_ACCOUNT_CANDIDATES = [
     "credentials.json",
 ]
 
-# ─── DANH SÁCH 3 SUP ─────────────────────────────────────────
-SUPS = {
+# ─── DANH SÁCH NHÂN SỰ CẦN CHECK-IN (3 SUP/AM + 6 HR) ──────
+MEMBERS = {
+    # ── 1. NHÓM SUP / AM (3 người) ──
     "am_luc_nt": {
         "id": "am_luc_nt",
+        "emp_code": "AM_LUC",
         "full_name": "Nguyễn Tiến Lực",
+        "display_name": "Nguyễn Tiến Lực",
         "role": "SUP/AM",
-        "provinces": ["Khánh Hòa", "Đắk Nông"],
-        "primary_locations": ["Kho Trung Chuyển Khánh Hòa", "Kho Chuyển Tiếp Đắk Nông"],
-        "aliases": ["nguyễn tiến lực", "nguyen tien luc", "tiến lực", "tien luc", "lực", "luc", "lucnt"],
-        "location_keywords": ["khánh hòa", "khanh hoa", "ktckh", "kctkh", "đắk nông", "dak nong", "dno", "kh", "dn"]
+        "aliases": ["nguyễn tiến lực", "nguyen tien luc", "tiến lực", "tien luc", "am lực", "am luc", "sup lực", "sup luc", "lực", "luc"],
+        "avoid_confusions": []
     },
     "am_hoang_nm": {
         "id": "am_hoang_nm",
+        "emp_code": "AM_HOANG",
         "full_name": "Nguyễn Minh Hoàng",
+        "display_name": "Nguyễn Minh Hoàng",
         "role": "SUP/AM",
-        "provinces": ["Lâm Đồng"],
-        "primary_locations": ["Kho Chuyển Tiếp Đức Trọng-Lâm Đồng", "Kho Chuyển Tiếp Bảo Lộc-Lâm Đồng"],
-        "aliases": ["nguyễn minh hoàng", "nguyen minh hoang", "minh hoàng", "minh hoang", "hoàng", "hoang", "hoangnm"],
-        "location_keywords": ["đức trọng", "duc trong", "bảo lộc", "bao loc", "lâm đồng", "lam dong", "dt", "bl", "ldo", "kctdt", "kctbl"]
+        "aliases": ["nguyễn minh hoàng", "nguyen minh hoang", "minh hoàng", "minh hoang", "am hoàng", "am hoang", "sup hoàng", "sup hoang", "hoàng", "hoang"],
+        "avoid_confusions": []
     },
     "am_khanh_nn": {
         "id": "am_khanh_nn",
+        "emp_code": "AM_KHANH",
         "full_name": "Nguyễn Ngọc Khánh",
+        "display_name": "Nguyễn Ngọc Khánh",
         "role": "SUP/AM",
-        "provinces": ["Bình Thuận"],
-        "primary_locations": ["Kho Chuyển Tiếp Bình Thuận", "Bưu cục Bình Thuận"],
-        "aliases": ["nguyễn ngọc khánh", "nguyen ngoc khanh", "ngọc khánh", "ngoc khanh", "khánh", "khanh", "khanhnn"],
-        "location_keywords": ["bình thuận", "binh thuan", "kctbt", "ktcbt", "bt", "bthuận", "bthuan", "phan thiết", "phan thiet", "la gi", "hàm thuận", "ham thuan", "hàm tân", "ham tan", "tuy phong", "bắc bình", "bac binh"]
+        "aliases": ["nguyễn ngọc khánh", "nguyen ngoc khanh", "ngọc khánh", "ngoc khanh", "am khánh", "am khanh", "sup khánh", "sup khanh", "khánh", "khanh"],
+        "avoid_confusions": ["khanh hoa", "khanh vinh", "khanh son"]
+    },
+
+    # ── 2. NHÓM HR / HRBP (6 người) ──
+    "hr_hoa_ttk": {
+        "id": "hr_hoa_ttk",
+        "emp_code": "3164867",
+        "full_name": "Trương Thị Kim Hoa",
+        "display_name": "Trương Thị Kim Hoa (3164867)",
+        "role": "HR",
+        "aliases": ["3164867", "trương thị kim hoa", "truong thi kim hoa", "kim hoa", "hr hoa", "hrbp hoa", "hoa"],
+        "avoid_confusions": ["khanh hoa", "ninh hoa", "dong ninh hoa", "hoa ninh", "hoa dinh", "xuan hoa"]
+    },
+    "hr_tuananh_l": {
+        "id": "hr_tuananh_l",
+        "emp_code": "3169241",
+        "full_name": "Lê Tuấn Anh",
+        "display_name": "Lê Tuấn Anh (3169241)",
+        "role": "HR",
+        "aliases": ["3169241", "lê tuấn anh", "le tuan anh", "tuấn anh", "tuan anh", "hr tuấn anh", "hr tuan anh", "hrbp tuấn anh", "hrbp tuan anh"],
+        "avoid_confusions": []
+    },
+    "hr_phuong_nht": {
+        "id": "hr_phuong_nht",
+        "emp_code": "3172797",
+        "full_name": "Nguyễn Hoàng Trúc Phương",
+        "display_name": "Nguyễn Hoàng Trúc Phương (3172797)",
+        "role": "HR",
+        "aliases": ["3172797", "nguyễn hoàng trúc phương", "nguyen hoang truc phuong", "trúc phương", "truc phuong", "hr trúc phương", "hr truc phuong", "hrbp trúc phương", "hrbp truc phuong", "hr phương", "hr phuong", "hrbp phương", "hrbp phuong", "phương", "phuong"],
+        "avoid_confusions": ["phuong dinh", "tuyen quang", "lien huong", "phuoc dinh"]
+    },
+    "hr_dat_vdq": {
+        "id": "hr_dat_vdq",
+        "emp_code": "3176531",
+        "full_name": "Vũ Đình Quốc Đạt",
+        "display_name": "Vũ Đình Quốc Đạt (3176531)",
+        "role": "HR",
+        "aliases": ["3176531", "vũ đình quốc đạt", "vu dinh quoc dat", "quốc đạt", "quoc dat", "hr đạt", "hr dat", "hrbp đạt", "hrbp dat", "đạt", "dat"],
+        "avoid_confusions": []
+    },
+    "hr_thinh_nt": {
+        "id": "hr_thinh_nt",
+        "emp_code": "3181498",
+        "full_name": "Nguyễn Trường Thịnh",
+        "display_name": "Nguyễn Trường Thịnh (3181498)",
+        "role": "HR",
+        "aliases": ["3181498", "nguyễn trường thịnh", "nguyen truong thinh", "trường thịnh", "truong thinh", "hr thịnh", "hr thinh", "hrbp thịnh", "hrbp thinh", "thịnh", "thinh"],
+        "avoid_confusions": []
+    },
+    "hr_tu_ttt": {
+        "id": "hr_tu_ttt",
+        "emp_code": "3098843",
+        "full_name": "Thái Thị Thanh Tú",
+        "display_name": "Thái Thị Thanh Tú (3098843)",
+        "role": "HR",
+        "aliases": ["3098843", "thái thị thanh tú", "thai thi thanh tu", "thanh tú", "thanh tu", "hr tú", "hr tu", "hrbp tú", "hrbp tu", "tú", "tu"],
+        "avoid_confusions": ["tu bong", "cu jut", "tuy duc", "tuy phong", "tuyen quang"]
     }
 }
+
+# Alias cũ để tương thích
+SUPS = MEMBERS
 
 # ─── GOOGLE SHEETS HELPER ────────────────────────────────────
 
@@ -128,33 +189,76 @@ def get_worksheet():
         ws = sh.sheet1
     return ws
 
+def get_worksheet_cocau():
+    gc = get_gspread_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    try:
+        return sh.worksheet(SHEET_COCAU_TAB)
+    except Exception:
+        return None
+
+# ─── CACHE BƯU CỤC TỪ TAB CƠ CẤU ───────────────────────────
+CACHED_LOCATIONS = []
+CACHED_LOCATIONS_TIME = 0
+
+def get_location_registry():
+    global CACHED_LOCATIONS, CACHED_LOCATIONS_TIME
+    now_ts = time.time()
+    # Cache 1 tiếng
+    if CACHED_LOCATIONS and (now_ts - CACHED_LOCATIONS_TIME < 3600):
+        return CACHED_LOCATIONS
+    try:
+        ws_cc = get_worksheet_cocau()
+        if not ws_cc:
+            return []
+        rows = ws_cc.get_all_values()
+        locs = []
+        for r in rows[1:]:
+            if len(r) >= 2 and r[1].strip():
+                raw_name = r[1].strip()
+                clean_name = re.sub(r'^\([A-Z0-9]+\)\s*', '', raw_name).strip()
+                locs.append({
+                    "raw": raw_name,
+                    "clean": clean_name,
+                    "norm": remove_accents(clean_name),
+                    "norm_raw": remove_accents(raw_name)
+                })
+        # Ưu tiên các bưu cục có tên dài và chi tiết trước
+        locs.sort(key=lambda x: len(x["clean"]), reverse=True)
+        CACHED_LOCATIONS = locs
+        CACHED_LOCATIONS_TIME = now_ts
+        return locs
+    except Exception as e:
+        print(f"[WARN] Không thể đọc tab Cơ cấu: {e}")
+        return CACHED_LOCATIONS or []
+
 def ensure_today_rows(ws, target_date_str=None):
-    """Đảm bảo có đủ 3 dòng cho 3 SUP trong ngày target_date_str (DD/MM/YYYY)."""
+    """Đảm bảo có đủ 9 dòng cho 3 SUP và 6 HR trong ngày target_date_str (DD/MM/YYYY)."""
     if not target_date_str:
         target_date_str = get_vn_today().strftime("%d/%m/%Y")
 
     rows = ws.get_all_values()
     if not rows:
-        headers = ['Ngày', 'Tên SUP', 'Trạng thái', 'Giờ check-in', 'Kho / Bưu cục check-in', 'Ghi chú', 'Chi tiết / Ảnh', 'Thời gian cập nhật']
+        headers = ['Ngày', 'Nhân sự (SUP/HR)', 'Trạng thái', 'Giờ check-in', 'Kho / Bưu cục check-in', 'Ghi chú', 'Chi tiết / Ảnh', 'Thời gian cập nhật']
         ws.append_row(headers)
         rows = [headers]
 
-    # Kiểm tra xem SUP nào đã có dòng hôm nay
-    existing_sups = set()
+    # Kiểm tra xem nhân sự nào đã có dòng hôm nay
+    existing_members = set()
     for idx, r in enumerate(rows[1:], 2):
         if len(r) >= 2 and r[0].strip() == target_date_str:
-            name = r[1].strip()
-            for s_id, s_info in SUPS.items():
-                if s_info["full_name"].lower() in name.lower():
-                    existing_sups.add(s_id)
+            row_name = r[1].strip()
+            for m_id, m_info in MEMBERS.items():
+                if m_info["full_name"].lower() in row_name.lower():
+                    existing_members.add(m_id)
 
-    # Thêm dòng cho SUP còn thiếu
+    # Thêm dòng cho nhân sự còn thiếu
     appended = False
-    for s_id, s_info in SUPS.items():
-        if s_id not in existing_sups:
+    for m_id, m_info in MEMBERS.items():
+        if m_id not in existing_members:
             ws.append_row([
                 target_date_str,
-                s_info["full_name"],
+                m_info["display_name"],
                 "Chưa check-in",
                 "",
                 "",
@@ -169,17 +273,19 @@ def ensure_today_rows(ws, target_date_str=None):
     return target_date_str
 
 def get_today_records(target_date_str=None):
-    """Lấy dữ liệu check-in của 3 SUP trong ngày từ Google Sheet."""
+    """Lấy dữ liệu check-in của 9 nhân sự trong ngày từ Google Sheet."""
     ws = get_worksheet()
     target_date_str = ensure_today_rows(ws, target_date_str)
     rows = ws.get_all_values()
 
     records = {}
-    for s_id, s_info in SUPS.items():
-        records[s_id] = {
+    for m_id, m_info in MEMBERS.items():
+        records[m_id] = {
             "row_idx": None,
-            "sup_id": s_id,
-            "name": s_info["full_name"],
+            "member_id": m_id,
+            "name": m_info["full_name"],
+            "display_name": m_info["display_name"],
+            "role": m_info["role"],
             "date": target_date_str,
             "status": "Chưa check-in",
             "time": "",
@@ -191,21 +297,21 @@ def get_today_records(target_date_str=None):
 
     for idx, r in enumerate(rows[1:], 2):
         if len(r) >= 2 and r[0].strip() == target_date_str:
-            sup_name_in_row = r[1].strip()
-            for s_id, s_info in SUPS.items():
-                if s_info["full_name"].lower() in sup_name_in_row.lower():
-                    records[s_id]["row_idx"] = idx
-                    records[s_id]["status"] = r[2].strip() if len(r) > 2 else "Chưa check-in"
-                    records[s_id]["time"] = r[3].strip() if len(r) > 3 else ""
-                    records[s_id]["location"] = r[4].strip() if len(r) > 4 else ""
-                    records[s_id]["note"] = r[5].strip() if len(r) > 5 else ""
-                    records[s_id]["details"] = r[6].strip() if len(r) > 6 else ""
-                    records[s_id]["updated_at"] = r[7].strip() if len(r) > 7 else ""
+            row_name = r[1].strip()
+            for m_id, m_info in MEMBERS.items():
+                if m_info["full_name"].lower() in row_name.lower():
+                    records[m_id]["row_idx"] = idx
+                    records[m_id]["status"] = r[2].strip() if len(r) > 2 else "Chưa check-in"
+                    records[m_id]["time"] = r[3].strip() if len(r) > 3 else ""
+                    records[m_id]["location"] = r[4].strip() if len(r) > 4 else ""
+                    records[m_id]["note"] = r[5].strip() if len(r) > 5 else ""
+                    records[m_id]["details"] = r[6].strip() if len(r) > 6 else ""
+                    records[m_id]["updated_at"] = r[7].strip() if len(r) > 7 else ""
 
     return ws, records
 
 def update_sup_record(ws, row_idx, status, checkin_time="", location="", note="", details=""):
-    """Cập nhật dòng dữ liệu của SUP trên Google Sheet."""
+    """Cập nhật dòng dữ liệu nhân sự trên Google Sheet."""
     updated_at = get_vn_now().strftime("%d/%m/%Y %H:%M:%S")
     ws.update(
         values=[[status, checkin_time, location, note, details, updated_at]],
@@ -234,11 +340,6 @@ def send_gtalk_message(text: str, channel_id: str = GTALK_CHANNEL_ID, oa_token: 
 # ─── PARSE PAYLOAD TIN NHẮN & ẢNH GTALK ─────────────────────
 
 def parse_gtalk_message_payload(data: dict):
-    """
-    Trích xuất text/caption và ảnh đính kèm từ payload Webhook GTalk.
-    GTalk gửi ảnh theo cấu trúc JSON:
-    {"caption": "...", "items": [{"image": {"fileId": "...", "width": 720, "height": 1280}}]}
-    """
     msg_obj = data.get("message") or {}
     content_raw = data.get("content") or msg_obj.get("content") or {}
     
@@ -286,7 +387,7 @@ def parse_gtalk_message_payload(data: dict):
 
     return text, has_photo, photo_file_id
 
-# ─── NHẬN DIỆN SUP & NỘI DUNG CHECK-IN ───────────────────────
+# ─── NHẬN DIỆN NHÂN SỰ & NỘI DUNG CHECK-IN ──────────────────
 
 def remove_accents(input_str: str) -> str:
     """Loại bỏ dấu tiếng Việt chuẩn xác (bao gồm cả chữ đ/Đ)."""
@@ -296,127 +397,100 @@ def remove_accents(input_str: str) -> str:
     nfkd = unicodedata.normalize('NFKD', input_str)
     return ''.join([c for c in nfkd if not unicodedata.combining(c)]).lower()
 
-def detect_location(text: str, sup_info: dict = None) -> str:
+def detect_location(text: str) -> str:
     """
     Trích xuất kho hoặc bưu cục từ tin nhắn check-in.
-    Hỗ trợ toàn bộ biến thể viết tắt:
-    - KCT BT, KCT Bthuận, kct bình thuận, ktc bình thuận, kctbt, bt... -> Kho Chuyển Tiếp Bình Thuận
-    - KTC KH, KTCKH, kct kh, kho khánh hòa... -> Kho Trung Chuyển Khánh Hòa
-    - KCT DN, KCT DNO, kct đắk nông, dno... -> Kho Chuyển Tiếp Đắk Nông
-    - KCT DT, kct đức trọng... -> Kho Chuyển Tiếp Đức Trọng
-    - KCT BL, kct bảo lộc... -> Kho Chuyển Tiếp Bảo Lộc
-    - BC Phan Thiết, La Gi, Hàm Thuận Bắc, Hàm Tân...
+    Tra cứu đối chiếu với 99 bưu cục trong tab 'Cơ cấu' và các kho chuyển tiếp lớn.
     """
     norm_txt = remove_accents(text)
 
-    # 1. BÌNH THUẬN (KCT / KTC Bình Thuận & viết tắt: KCT BT, KCT Bthuận, kct bình thuận, ktc bình thuận, kctbt...)
+    # 1. Các Kho Chuyển Tiếp / Kho Trung Chuyển lớn của NTB
+    if re.search(r'\b(kct|ktc|kho)\s*(dt|d\s*trong|duc\s*trong|ductrong)\b|\bkctdt\b|\bduc\s*trong\b', norm_txt) and 'duc trong 1' not in norm_txt and 'duc trong 2' not in norm_txt:
+        return "Kho Chuyển Tiếp Đức Trọng"
     if re.search(r'\b(kct|ktc|kho)\s*(bt|b\s*thuan|bthuan|binh\s*thuan)\b|\bkctbt\b|\bktcbt\b|\bbinh\s*thuan\b', norm_txt):
         return "Kho Chuyển Tiếp Bình Thuận"
-
-    # 2. KHÁNH HÒA (KTC / KCT Khánh Hòa & viết tắt: KTC KH, KTCKH, kct kh, kho khánh hòa...)
-    if re.search(r'\b(ktc|kct|kho)\s*(kh|k\s*hoa|khoa|khanh\s*hoa)\b|\bktckh\b|\bkctkh\b|\bkhanh\s*hoa\b', norm_txt):
+    if re.search(r'\b(ktc|kct|kho)\s*(kh|k\s*hoa|khoa|khanh\s*hoa)\b|\bktckh\b|\bkctkh\b|\bkhanh\s*hoa\b', norm_txt) and not re.search(r'\b(khanh\s*vinh|khanh\s*son|bac\s*nha\s*trang)\b', norm_txt):
         return "Kho Trung Chuyển Khánh Hòa"
-
-    # 3. ĐẮK NÔNG (KCT / KTC Đắk Nông & viết tắt: KCT DN, KCT DNO, kct đắk nông, dno...)
     if re.search(r'\b(kct|ktc|kho)\s*(dn|dno|dak\s*nong|daknong)\b|\bkctdn\b|\bkctdno\b|\bdak\s*nong\b|\bdno\b', norm_txt):
         return "Kho Chuyển Tiếp Đắk Nông"
-
-    # 4. ĐỨC TRỌNG (KCT / KTC Đức Trọng & viết tắt: KCT DT, kct đức trọng...)
-    if re.search(r'\b(kct|ktc|kho)\s*(dt|d\s*trong|duc\s*trong|ductrong)\b|\bkctdt\b|\bduc\s*trong\b', norm_txt):
-        return "Kho Chuyển Tiếp Đức Trọng"
-
-    # 5. BẢO LỘC (KCT / KTC Bảo Lộc & viết tắt: KCT BL, kct bảo lộc...)
-    if re.search(r'\b(kct|ktc|kho)\s*(bl|b\s*loc|bao\s*loc|baoloc)\b|\bkctbl\b|\bbao\s*loc\b', norm_txt):
+    if re.search(r'\b(kct|ktc|kho)\s*(bl|b\s*loc|bao\s*loc|baoloc)\b|\bkctbl\b|\bbao\s*loc\b', norm_txt) and 'bao loc 1' not in norm_txt and 'bao loc 3' not in norm_txt:
         return "Kho Chuyển Tiếp Bảo Lộc"
 
-    # 6. CÁC BƯU CỤC (SUP Khánh thường di chuyển qua các bưu cục Bình Thuận)
-    if re.search(r'\b(phan\s*thiet|pt)\b', norm_txt):
-        return "BC Phan Thiết"
-    if re.search(r'\b(la\s*gi|lagi)\b', norm_txt):
-        return "BC La Gi"
-    if re.search(r'\b(ham\s*thuan\s*bac|htb)\b', norm_txt):
-        return "BC Hàm Thuận Bắc"
-    if re.search(r'\b(ham\s*thuan\s*nam|htn)\b', norm_txt):
-        return "BC Hàm Thuận Nam"
-    if re.search(r'\b(ham\s*tan)\b', norm_txt):
-        return "BC Hàm Tân"
-    if re.search(r'\b(tuy\s*phong)\b', norm_txt):
-        return "BC Tuy Phong"
-    if re.search(r'\b(bac\s*binh)\b', norm_txt):
-        return "BC Bắc Bình"
-    if re.search(r'\b(tanh\s*linh)\b', norm_txt):
-        return "BC Tánh Linh"
-    if re.search(r'\b(duc\s*linh)\b', norm_txt):
-        return "BC Đức Linh"
-    if re.search(r'\b(phu\s*quy)\b', norm_txt):
-        return "BC Phú Quý"
+    # 2. Tra cứu động đối chiếu với danh sách bưu cục từ tab Cơ cấu
+    locations = get_location_registry()
+    for loc in locations:
+        # Khớp theo tên chuẩn bưu cục (đã bỏ tiền tố mã tỉnh)
+        if re.search(r'\b' + re.escape(loc["norm"]) + r'\b', norm_txt):
+            return loc["raw"]
 
-    # 7. Nhận diện dạng 'BC <Tên>' hoặc 'Bưu cục <Tên>'
+    # 3. Nhận diện dạng 'BC <Tên>' hoặc 'Bưu cục <Tên>'
     bc_match = re.search(r'(?i)\b(?:bc|bưu\s*cục)\s+([^\n\r,\:\;]+)', text)
     if bc_match:
         name_clean = bc_match.group(1).strip()
         return f"BC {name_clean.title()}"
 
-    # 8. Nếu có text sau từ checkin mà chưa khớp các từ trên
+    # 4. Nếu có text sau từ checkin mà chưa khớp các từ trên
     clean = re.sub(r'(?i)#?checkin|#?check\s*in|diem\s*danh|gui\s*checkin', '', text).strip()
     clean = re.sub(r'^[\s\-\:\,\.]+', '', clean).strip()
-    if len(clean) > 2 and not any(kw in clean.lower() for kw in ["sup", "chup", "anh", "hinh", "camera", "gui"]):
+    if len(clean) > 2 and not any(kw in clean.lower() for kw in ["sup", "am", "hr", "hrbp", "chup", "anh", "hinh", "camera", "gui"]):
         return clean
 
-    # Mặc định lấy kho chính đầu tiên của SUP nếu có
-    if sup_info and sup_info.get("primary_locations"):
-        return sup_info["primary_locations"][0]
+    return "Bưu cục NTB"
 
-    return "Kho Chuyển Tiếp Bình Thuận"
-
-def detect_target_sup(sender_name: str, text: str):
+def detect_target_member(sender_name: str, text: str):
     """
-    Nhận diện SUP nào dựa trên:
-    1. Tên người gửi trên GTalk (Display Name)
-    2. Tên SUP được nhắc tới trong text
-    3. Kho / Bưu cục / Địa bàn được nhắc tới trong text
+    Nhận diện nhân sự (3 SUP/AM + 6 HR) chặt chẽ, CHỐNG NHẢY NHẦM TUYỆT ĐỐI:
+    1. So khớp người gửi trước (Display Name trên GTalk).
+    2. So khớp từ khóa / Họ tên / Mã NV / Chức danh trong nội dung tin nhắn.
+    3. TUYỆT ĐỐI KHÔNG FALLBACK THEO KHO (tránh tình trạng người này đến kho người khác bị gán nhầm).
     """
     norm_sender = remove_accents(sender_name)
     norm_text = remove_accents(text)
 
-    # 1. So khớp người gửi trước (Display Name trên GTalk)
-    for s_id, s_info in SUPS.items():
-        for alias in s_info["aliases"]:
-            if alias == "khanh" and "khanh hoa" in norm_sender and "ngoc khanh" not in norm_sender:
-                continue
-            if remove_accents(alias) in norm_sender:
-                return s_id, s_info
+    # 1. So khớp người gửi trên GTalk (nếu có Display Name)
+    if norm_sender:
+        for m_id, m_info in MEMBERS.items():
+            for alias in m_info["aliases"]:
+                n_alias = remove_accents(alias)
+                if len(n_alias) <= 3:
+                    if re.search(r'\b' + re.escape(n_alias) + r'\b', norm_sender):
+                        return m_id, m_info
+                else:
+                    if n_alias in norm_sender:
+                        return m_id, m_info
 
-    # Chuẩn bị text đã loại bỏ chữ 'khanh hoa' để tránh nhận nhầm sang SUP Khánh
-    text_no_kh = re.sub(r'\bkhanh\s*hoa\b', ' ', norm_text)
+    # 2. So khớp từ khóa trong text theo độ dài giảm dần (ưu tiên cụm từ dài/chính xác nhất)
+    candidates = []
+    for m_id, m_info in MEMBERS.items():
+        for alias in m_info["aliases"]:
+            candidates.append((len(alias), alias, m_id, m_info))
 
-    # 2. So khớp từ khóa tên SUP trong text (ví dụ: 'SUP Khánh gửi checkin...', 'Khánh checkin')
-    for s_id, s_info in SUPS.items():
-        target_t = text_no_kh if s_id == "am_khanh_nn" else norm_text
-        for alias in s_info["aliases"]:
-            if re.search(r'\b' + re.escape(remove_accents(alias)) + r'\b', target_t):
-                return s_id, s_info
+    candidates.sort(key=lambda x: x[0], reverse=True)
 
-    # 3. So khớp theo kho/địa bàn đặc thù trong text:
-    # Khánh Hòa / Đắk Nông -> SUP Lực (ưu tiên check trước để không lẫn chữ 'khánh')
-    if re.search(r'\b(ktc|kct|kho)\s*(kh|khanh\s*hoa)\b|\bktckh\b|\bkctkh\b|\bkhanh\s*hoa\b|\b(kct|ktc|kho)\s*(dn|dno|dak\s*nong)\b|\bkctdn\b|\bkctdno\b|\bdak\s*nong\b|\bdno\b', norm_text):
-        return "am_luc_nt", SUPS["am_luc_nt"]
+    for length, alias, m_id, m_info in candidates:
+        n_alias = remove_accents(alias)
+        target_text = norm_text
 
-    # Bình Thuận / Phan Thiết / La Gi -> SUP Khánh
-    if re.search(r'\b(kct|ktc|kho)\s*(bt|b\s*thuan|bthuan|binh\s*thuan)\b|\bkctbt\b|\bktcbt\b|\bbinh\s*thuan\b|\bphan\s*thiet\b|\bla\s*gi\b|\blagi\b|\bham\s*thuan\b|\bham\s*tan\b|\btuy\s*phong\b|\bbac\s*binh\b', norm_text):
-        return "am_khanh_nn", SUPS["am_khanh_nn"]
+        # Loại bỏ các từ gây nhầm lẫn nếu có
+        for avoid in m_info.get("avoid_confusions", []):
+            target_text = re.sub(r'\b' + re.escape(remove_accents(avoid)) + r'\b', ' ', target_text)
 
-    # Đức Trọng / Bảo Lộc / Lâm Đồng -> SUP Hoàng
-    if re.search(r'\b(kct|ktc|kho)\s*(dt|duc\s*trong)\b|\bkctdt\b|\bduc\s*trong\b|\b(kct|ktc|kho)\s*(bl|bao\s*loc)\b|\bkctbl\b|\bbao\s*loc\b|\blam\s*dong\b', norm_text):
-        return "am_hoang_nm", SUPS["am_hoang_nm"]
+        pattern = r'\b' + re.escape(n_alias) + r'\b'
+        if re.search(pattern, target_text):
+            return m_id, m_info
 
+    # KHÔNG FALLBACK THEO KHO
     return None, None
+
+# Hàm bọc để giữ tính tương thích
+def detect_target_sup(sender_name: str, text: str):
+    return detect_target_member(sender_name, text)
 
 # ─── XỬ LÝ WEBHOOK TỪ GTALK ──────────────────────────────────
 
 def handle_sup_webhook(data: dict):
     """
-    Xử lý payload khi có tin nhắn/ảnh gửi vào Group SUP (2095921878551764992).
+    Xử lý payload khi có tin nhắn/ảnh gửi vào Group Check-in (2099483038556782592).
     """
     now = get_vn_now()
     now_hm = now.strftime("%H:%M:%S")
@@ -427,31 +501,29 @@ def handle_sup_webhook(data: dict):
 
     # Trích xuất caption text và ảnh
     text, has_photo, photo_file_id = parse_gtalk_message_payload(data)
-
     norm_txt = remove_accents(text)
 
     # Bỏ qua nếu là tin do chính bot gửi
-    if any(kw in text for kw in ["XÁC NHẬN CHECK-IN", "NHẮC NHỞ", "CẢNH BÁO 08:00", "BÁO CÁO CHECK-IN SUP"]):
+    if any(kw in text for kw in ["XÁC NHẬN CHECK-IN", "NHẮC NHỞ", "CẢNH BÁO 08:00", "BÁO CÁO CHECK-IN"]):
         return {"status": "skipped", "reason": "bot message"}
 
     # ── 1. KIỂM TRA TIN BÁO NGHỈ / CÔNG TÁC / MIỄN CHECK-IN ──
     is_excuse = bool(re.search(r'(?i)#?off\b|xin\s*nghi|nghi\s*phep|bao\s*vang|cong\s*tac|di\s*hop|xin\s*mien|mien\s*check\s*in', norm_txt))
     if is_excuse:
-        sup_id, sup_info = detect_target_sup(sender_name, text)
-        if not sup_id:
-            return {"status": "ignored", "reason": "cannot identify sup for excuse"}
+        m_id, m_info = detect_target_member(sender_name, text)
+        if not m_id:
+            return {"status": "ignored", "reason": "cannot identify member for excuse"}
 
-        # Trích xuất lý do:
+        # Trích xuất lý do
         reason = ""
         m_reason = re.search(r'(?i)(?:vì\s*lý\s*do|vi\s*ly\s*do|lý\s*do|ly\s*do)[:\s]+(.+)', text)
         if m_reason:
             reason = m_reason.group(1).strip()
         else:
-            # Lọc bỏ các tiền tố xin phép và tên SUP để trích xuất lý do
             cleaned = text
-            for alias in sup_info["aliases"]:
+            for alias in m_info["aliases"]:
                 cleaned = re.sub(r'(?i)\b' + re.escape(alias) + r'\b', '', cleaned)
-            cleaned = re.sub(r'(?i)\b(am|sup)\b', '', cleaned)
+            cleaned = re.sub(r'(?i)\b(am|sup|hr|hrbp)\b', '', cleaned)
             cleaned = re.sub(r'(?i)#?off[:\s]*|xin\s*mi[eễ]n\s*check\s*in[:\s]*|mi[eễ]n\s*check\s*in[:\s]*|xin\s*ngh[iỉ]\s*ph[eé]p[:\s]*|xin\s*ngh[iỉ][:\s]*|ngh[iỉ]\s*ph[eé]p[:\s]*|b[aá]o\s*v[aắ]ng[:\s]*', '', cleaned)
             cleaned = re.sub(r'^[\s\-\:\,\.]+', '', cleaned).strip()
             reason = cleaned
@@ -461,42 +533,41 @@ def handle_sup_webhook(data: dict):
 
         try:
             ws, records = get_today_records(today_display)
-            row_idx = records[sup_id]["row_idx"]
+            row_idx = records[m_id]["row_idx"]
             if row_idx:
                 update_sup_record(ws, row_idx, status="🏖️ Miễn check-in", note=reason, details=f"Báo lúc {now_hm}")
 
             reply = (
                 f"📝 <b>XÁC NHẬN MIỄN CHECK-IN / NGHỈ PHÉP</b>\n"
-                f"👤 AM/SUP: <b>{sup_info['full_name']}</b>\n"
+                f"👤 {m_info['role']}: <b>{m_info['full_name']}</b>\n"
                 f"📌 Trạng thái: <b>🏖️ Miễn check-in / Xin phép</b>\n"
                 f"💬 Lý do: <i>{reason}</i>\n"
                 f"⏰ Thời gian ghi nhận: {now_hm} - {today_display}"
             )
             send_gtalk_message(reply)
-            return {"status": "recorded_excuse", "sup": sup_info["full_name"], "reason": reason}
+            return {"status": "recorded_excuse", "member": m_info["full_name"], "reason": reason}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    # ── 2. KIỂM TRA TIN CHECK-IN (Có từ khóa checkin, kho/bưu cục hoặc gửi kèm ảnh) ──
+    # ── 2. KIỂM TRA TIN CHECK-IN (Có từ khóa checkin hoặc gửi kèm ảnh) ──
     is_checkin = bool(re.search(r'(?i)#?check\s*in|diem\s*danh|kct|ktc|buu\s*cuc|kho|bt|kh|dn|dt|bl|pt|la\s*gi', text) or has_photo)
     if not is_checkin:
         return {"status": "ignored", "reason": "not checkin message"}
 
-    sup_id, sup_info = detect_target_sup(sender_name, text)
-    if not sup_id:
-        return {"status": "ignored", "reason": "cannot identify sup for checkin"}
+    m_id, m_info = detect_target_member(sender_name, text)
+    if not m_id:
+        return {"status": "ignored", "reason": "cannot identify member for checkin"}
 
-    location = detect_location(text, sup_info)
+    location = detect_location(text)
 
     # Đánh giá đúng giờ hay trễ (Cut-off là 08:00:59)
     cutoff_time = now.replace(hour=8, minute=0, second=59, microsecond=0)
     is_on_time = (now <= cutoff_time)
     status_label = "✅ Đúng giờ" if is_on_time else "⚠️ Gửi bù (Trễ)"
-    photo_label = "📷 Có ảnh TimestampCam" if has_photo else "📝 Gửi text (Chưa đính kèm ảnh)"
 
     try:
         ws, records = get_today_records(today_display)
-        row_idx = records[sup_id]["row_idx"]
+        row_idx = records[m_id]["row_idx"]
         if row_idx:
             update_sup_record(
                 ws,
@@ -510,13 +581,13 @@ def handle_sup_webhook(data: dict):
 
         reply = (
             f"✅ <b>XÁC NHẬN CHECK-IN ĐẦU NGÀY</b>\n"
-            f"👤 SUP: <b>{sup_info['full_name']}</b>\n"
+            f"👤 {m_info['role']}: <b>{m_info['full_name']}</b>\n"
             f"📍 Địa điểm: <b>{location}</b>\n"
             f"⏰ Thời gian: <b>{now_hm}</b> ({status_label})\n"
             f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Xem bảng theo dõi Check-in</a>"
         )
         send_gtalk_message(reply)
-        return {"status": "recorded_checkin", "sup": sup_info["full_name"], "status_label": status_label}
+        return {"status": "recorded_checkin", "member": m_info["full_name"], "status_label": status_label}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -525,91 +596,92 @@ def handle_sup_webhook(data: dict):
 last_job_executed = {}
 
 def job_remind_0755():
-    """07:55 - Nhắc nhở các SUP chưa check-in (còn 5 phút trước hạn 08:00)."""
+    """07:55 - Nhắc nhở các nhân sự chưa check-in (còn 5 phút trước hạn 08:00)."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
     try:
         ws, records = get_today_records(today_display)
-        missing_sups = []
-        for s_id, rec in records.items():
+        missing_members = []
+        for m_id, rec in records.items():
             status = rec.get("status", "")
-            # Nếu chưa check-in và không phải nghỉ phép / miễn check-in
             if "Chưa check-in" in status and not any(kw in status for kw in ["Nghỉ", "Vắng", "Đúng giờ", "Gửi bù", "Miễn"]):
-                missing_sups.append(rec["name"])
+                missing_members.append(f"{rec['name']} ({rec['role']})")
 
-        if not missing_sups:
-            print(f"[{now.strftime('%H:%M:%S')}] 07:55 - Tất cả SUP đã check-in hoặc xin nghỉ. Không cần nhắc.")
+        if not missing_members:
+            print(f"[{now.strftime('%H:%M:%S')}] 07:55 - Tất cả nhân sự đã check-in hoặc xin nghỉ. Không cần nhắc.")
             return
 
         lines = [
             "⏰ <b>[NHẮC NHỞ CHECK-IN 07:55]</b>",
             "<i>Còn 5 phút trước giờ chốt điểm danh đầu ca sáng (08:00)!</i>",
             "",
-            "📌 <b>Danh sách SUP chưa gửi check-in TimestampCam:</b>"
+            "📌 <b>Danh sách nhân sự chưa gửi check-in TimestampCam:</b>"
         ]
-        for idx, name in enumerate(missing_sups, 1):
-            lines.append(f"{idx}. <b>{name}</b>")
+        for idx, item in enumerate(missing_members, 1):
+            lines.append(f"{idx}. <b>{item}</b>")
 
         lines.extend([
             "",
-            "👉 <i>Yêu cầu các SUP chụp ảnh TimestampCam kèm vị trí kho/bưu cục gửi vào nhóm ngay nhé!</i>",
+            "👉 <i>Yêu cầu các AM/SUP và HR khẩn trương gửi ảnh TimestampCam kèm vị trí bưu cục/kho vào nhóm nhé!</i>",
             f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Bảng theo dõi Check-in</a>"
         ])
         send_gtalk_message("\n".join(lines))
-        print(f"[{now.strftime('%H:%M:%S')}] Đã gửi nhắc nhở 07:55 cho {len(missing_sups)} SUP.")
+        print(f"[{now.strftime('%H:%M:%S')}] Đã gửi nhắc nhở 07:55 cho {len(missing_members)} người.")
     except Exception as e:
         print(f"[ERROR job_remind_0755]: {e}")
 
 def job_cutoff_0800():
-    """08:00 - Cảnh báo quá hạn và yêu cầu các SUP chưa check-in gửi bù ngay."""
+    """08:00 - Cảnh báo quá hạn và yêu cầu nhân sự chưa check-in gửi bù ngay."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
     try:
         ws, records = get_today_records(today_display)
-        overdue_sups = []
-        for s_id, rec in records.items():
+        overdue_members = []
+        for m_id, rec in records.items():
             status = rec.get("status", "")
             if "Chưa check-in" in status:
-                overdue_sups.append(rec["name"])
-                # Cập nhật thành Quá hạn (Chờ bù)
+                overdue_members.append(f"{rec['name']} ({rec['role']})")
                 if rec["row_idx"]:
                     update_sup_record(ws, rec["row_idx"], status="❌ Quá hạn (Chờ bù)", note="Quá 08:00 chưa gửi")
 
-        if not overdue_sups:
-            print(f"[{now.strftime('%H:%M:%S')}] 08:00 - Tất cả SUP đã hoàn thành check-in đúng giờ hoặc xin phép.")
+        if not overdue_members:
+            print(f"[{now.strftime('%H:%M:%S')}] 08:00 - Tất cả nhân sự đã hoàn thành check-in đúng giờ hoặc xin phép.")
             return
 
         lines = [
             "⚠️ <b>[CẢNH BÁO QUÁ HẠN CHECK-IN 08:00]</b>",
             "<i>Đã quá 08:00 sáng - Hệ thống đã chốt danh sách check-in đúng giờ!</i>",
             "",
-            "❌ <b>Các SUP sau chưa check-in đúng hạn:</b>"
+            "❌ <b>Các nhân sự sau chưa check-in đúng hạn:</b>"
         ]
-        for idx, name in enumerate(overdue_sups, 1):
-            lines.append(f"{idx}. <b>{name}</b>")
+        for idx, item in enumerate(overdue_members, 1):
+            lines.append(f"{idx}. <b>{item}</b>")
 
         lines.extend([
             "",
-            "👉 <b>Yêu cầu các SUP khẩn trương chụp ảnh TimestampCam gửi bù ngay vào nhóm!</b>",
+            "👉 <b>Yêu cầu các bạn khẩn trương chụp ảnh TimestampCam gửi bù ngay vào nhóm!</b>",
             f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Bảng theo dõi Check-in</a>"
         ])
         send_gtalk_message("\n".join(lines))
-        print(f"[{now.strftime('%H:%M:%S')}] Đã gửi cảnh báo quá hạn 08:00 cho {len(overdue_sups)} SUP.")
+        print(f"[{now.strftime('%H:%M:%S')}] Đã gửi cảnh báo quá hạn 08:00 cho {len(overdue_members)} người.")
     except Exception as e:
         print(f"[ERROR job_cutoff_0800]: {e}")
 
 def job_recap_1100():
-    """11:00 - Báo cáo tổng hợp tình hình điểm danh ca sáng của 3 SUP."""
+    """11:00 - Báo cáo tổng hợp tình hình điểm danh ca sáng của SUP và HR."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
     try:
         ws, records = get_today_records(today_display)
         lines = [
-            f"📊 <b>BÁO CÁO CHECK-IN SUP ĐẦU NGÀY - {today_display} (11:00)</b>",
+            f"📊 <b>BÁO CÁO CHECK-IN ĐẦU NGÀY - {today_display} (11:00)</b>",
             "─────────────────────────────"
         ]
 
-        for idx, (s_id, rec) in enumerate(records.items(), 1):
+        sup_items = []
+        hr_items = []
+
+        for m_id, rec in records.items():
             status = rec.get("status", "Chưa check-in")
             time_str = rec.get("time", "")
             loc_str = rec.get("location", "")
@@ -632,11 +704,22 @@ def job_recap_1100():
                 detail_parts.append(f"<i>({note_str})</i>")
 
             detail_text = f" - {' | '.join(detail_parts)}" if detail_parts else ""
-            lines.append(f"{idx}. <b>{rec['name']}:</b> {icon} {status}{detail_text}")
+            line_str = f"• <b>{rec['name']}:</b> {icon} {status}{detail_text}"
+
+            if rec.get("role") == "SUP/AM":
+                sup_items.append(line_str)
+            else:
+                hr_items.append(line_str)
+
+        lines.append("👔 <b>KHỐI VẬN HÀNH (AM/SUP):</b>")
+        lines.extend(sup_items if sup_items else ["(Không có dữ liệu)"])
+        lines.append("")
+        lines.append("💼 <b>KHỐI NHÂN SỰ (HR/HRBP):</b>")
+        lines.extend(hr_items if hr_items else ["(Không có dữ liệu)"])
 
         lines.extend([
             "─────────────────────────────",
-            f"🔗 <b>Chi tiết:</b> <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Google Sheet Check-in SUP</a>"
+            f"🔗 <b>Chi tiết:</b> <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Google Sheet Điểm Danh</a>"
         ])
         send_gtalk_message("\n".join(lines))
         print(f"[{now.strftime('%H:%M:%S')}] Đã gửi báo cáo tổng hợp 11:00.")
@@ -661,7 +744,7 @@ def check_sup_schedule():
         if last_job_executed.get(trigger_key):
             return
         last_job_executed[trigger_key] = True
-        print(f"⏰ [SUP SCHEDULER] Kích hoạt {job_key_name} lúc {hm}...")
+        print(f"⏰ [SUP/HR SCHEDULER] Kích hoạt {job_key_name} lúc {hm}...")
         try:
             job_func()
         except Exception as e:
