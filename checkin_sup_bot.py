@@ -560,10 +560,16 @@ def handle_sup_webhook(data: dict):
 
     location = detect_location(text)
 
-    # Đánh giá đúng giờ hay trễ (Linh hoạt đầu ca sáng đến 08:30)
-    cutoff_time = now.replace(hour=8, minute=30, second=59, microsecond=0)
+    # Đánh giá đúng giờ hay trễ (Chốt hạn trước 08:00)
+    cutoff_time = now.replace(hour=8, minute=0, second=59, microsecond=0)
     is_on_time = (now <= cutoff_time)
-    status_label = "✅ Đúng giờ" if is_on_time else "⚠️ Gửi bù (Trễ)"
+    if is_on_time:
+        status_label = "✅ Đúng giờ"
+        note_text = "Đúng giờ"
+    else:
+        minutes_late = max(1, int((now - cutoff_time).total_seconds() // 60))
+        status_label = "⚠️ Gửi bù (Trễ)"
+        note_text = f"Trễ {minutes_late} phút"
 
     try:
         ws, records = get_today_records(today_display)
@@ -575,7 +581,7 @@ def handle_sup_webhook(data: dict):
                 status=status_label,
                 checkin_time=now_hm,
                 location=location,
-                note="Đúng giờ" if is_on_time else "Gửi bù sau 08:30",
+                note=note_text,
                 details=""
             )
 
