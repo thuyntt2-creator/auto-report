@@ -265,22 +265,18 @@ def ensure_today_rows(ws, target_date_str=None):
     # Thêm dòng cho nhân sự còn thiếu
     appended = False
     for m_id, m_info in MEMBERS.items():
-        if m_id not in existing_members:
-            # Thứ 7 và Chủ nhật khối HR nghỉ, không bắt buộc điểm danh
-            if is_weekend and m_info["role"] == "HR":
-                init_status = "🏖️ Nghỉ cuối tuần"
-                init_note = "Nghỉ T7/CN"
-            else:
-                init_status = "Chưa check-in"
-                init_note = ""
+        # Thứ 7 và Chủ nhật khối HR không cần điểm danh báo cáo
+        if is_weekend and m_info["role"] == "HR":
+            continue
 
+        if m_id not in existing_members:
             ws.append_row([
                 target_date_str,
                 m_info["display_name"],
-                init_status,
+                "Chưa check-in",
                 "",
                 "",
-                init_note,
+                "",
                 "",
                 get_vn_now().strftime("%d/%m/%Y %H:%M:%S")
             ])
@@ -764,16 +760,11 @@ def job_recap_1100():
 
         lines.append("👔 <b>KHỐI VẬN HÀNH (AM/SUP):</b>")
         lines.extend(sup_items if sup_items else ["(Không có dữ liệu)"])
-        lines.append("")
-        lines.append("💼 <b>KHỐI NHÂN SỰ (HR/HRBP):</b>")
-        if is_weekend:
-            # Cuối tuần: nếu có HR check-in thì hiển thị, còn không thì hiển thị Nghỉ cuối tuần
-            checked_in = [it for it in hr_items if any(kw in it for kw in ["Đúng giờ", "Gửi bù"])]
-            if checked_in:
-                lines.extend(hr_items)
-            else:
-                lines.append("• <i>🏖️ Nghỉ cuối tuần (Không yêu cầu điểm danh)</i>")
-        else:
+
+        # Thứ 7 và Chủ Nhật: Khối HR hoàn toàn không cần ghi gì
+        if not is_weekend:
+            lines.append("")
+            lines.append("💼 <b>KHỐI NHÂN SỰ (HR/HRBP):</b>")
             lines.extend(hr_items if hr_items else ["(Không có dữ liệu)"])
 
         lines.extend([
