@@ -517,6 +517,32 @@ def admin_fix_chi_m2():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/admin/fix_thuy_chi_today", methods=["GET", "POST"])
+def admin_fix_thuy_chi_today():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM attendance_records WHERE date = ? AND am_id = 'am_chi_htk' AND milestone_id = 5", (today_str,))
+            cur.execute("DELETE FROM raw_messages WHERE detected_am_id = 'am_chi_htk' AND detected_milestone = 5 AND DATE(received_at) = ?", (today_str,))
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_thuy_ctt', 'Cao Thị Thanh Thủy', 5, ? || ' 08:58:13', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = ? || ' 08:58:13',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str, today_str, today_str))
+            conn.commit()
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Fixed Thuy M5 ON_TIME and cleared Chi M5 for today"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/fix_nghia_m1", methods=["GET", "POST"])
 @app.route("/admin/fix_nghia_today", methods=["GET", "POST"])
 def admin_fix_nghia_m1():

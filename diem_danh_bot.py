@@ -440,7 +440,9 @@ def detect_hubs_in_text(text: str):
                 for v in variants:
                     nv = normalize_text(v)
                     no_acc_v = remove_accents(nv)
-                    if nv in norm_msg or no_acc_v in no_accent_msg:
+                    p_nv = r'(?<!\w)' + re.escape(nv) + r'(?!\w)'
+                    p_noacc = r'(?<![a-zA-Z0-9])' + re.escape(no_acc_v) + r'(?![a-zA-Z0-9])'
+                    if re.search(p_nv, norm_msg, re.IGNORECASE) or re.search(p_noacc, no_accent_msg, re.IGNORECASE):
                         matched_am = parser.detect_am(am_str, am_str)
                         matched.append({
                             'raw_hub': raw_hub,
