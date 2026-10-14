@@ -727,7 +727,8 @@ def job_recap_1100():
                 detail_parts.append(f"<i>({note_str})</i>")
 
             detail_text = f" - {' | '.join(detail_parts)}" if detail_parts else ""
-            line_str = f"• <b>{rec['name']}:</b> {icon} {status}{detail_text}"
+            clean_status = re.sub(r'^[^\w\s\(\)]+\s*', '', status)
+            line_str = f"• <b>{rec['name']}:</b> {icon} {clean_status}{detail_text}"
 
             if rec.get("role") == "SUP/AM":
                 sup_items.append(line_str)
