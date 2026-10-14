@@ -419,7 +419,6 @@ def detect_location(text: str) -> str:
     # 2. Tra cứu động đối chiếu với danh sách bưu cục từ tab Cơ cấu
     locations = get_location_registry()
     for loc in locations:
-        # Khớp theo tên chuẩn bưu cục (đã bỏ tiền tố mã tỉnh)
         if re.search(r'\b' + re.escape(loc["norm"]) + r'\b', norm_txt):
             return loc["raw"]
 
@@ -429,23 +428,16 @@ def detect_location(text: str) -> str:
         name_clean = bc_match.group(1).strip()
         return f"BC {name_clean.title()}"
 
-    # 4. Nếu có text sau từ checkin mà chưa khớp các từ trên
-    clean = re.sub(r'(?i)#?checkin|#?check\s*in|diem\s*danh|gui\s*checkin', '', text).strip()
-    clean = re.sub(r'^[\s\-\:\,\.]+', '', clean).strip()
-    if len(clean) > 2 and not any(kw in clean.lower() for kw in ["sup", "am", "hr", "hrbp", "chup", "anh", "hinh", "camera", "gui"]):
-        return clean
-
     return "Bưu cục NTB"
 
 def detect_target_member(sender_name: str, text: str):
     """
-    Nhận diện nhân sự (3 SUP/AM + 6 HR) chặt chẽ, CHỐNG NHẢY NHẦM TUYỆT ĐỐI:
+    Nhận diện nhân sự (3 SUP/AM + 6 HR) CHỐNG NHẢY NHẦM TUYỆT ĐỐI:
     1. So khớp người gửi trước (Display Name trên GTalk).
-    2. So khớp từ khóa / Họ tên / Mã NV / Chức danh trong nội dung tin nhắn.
-    3. TUYỆT ĐỐI KHÔNG FALLBACK THEO KHO (tránh tình trạng người này đến kho người khác bị gán nhầm).
+    2. Loại bỏ các chuỗi mention @Tên để không nhận nhầm người bị tag.
+    3. TUYỆT ĐỐI KHÔNG FALLBACK THEO KHO.
     """
     norm_sender = remove_accents(sender_name)
-    norm_text = remove_accents(text)
 
     # 1. So khớp người gửi trên GTalk (nếu có Display Name)
     if norm_sender:
@@ -459,7 +451,11 @@ def detect_target_member(sender_name: str, text: str):
                     if n_alias in norm_sender:
                         return m_id, m_info
 
-    # 2. So khớp từ khóa trong text theo độ dài giảm dần (ưu tiên cụm từ dài/chính xác nhất)
+    # 2. Loại bỏ các đoạn mention dạng @Tên khỏi text để tránh người khác tag tên
+    text_clean = re.sub(r'@[\w\s\.\-]+(?=[\s\:\,\.\?\!]|$)', ' ', text)
+    norm_text = remove_accents(text_clean)
+
+    # 3. So khớp từ khóa trong text theo độ dài giảm dần
     candidates = []
     for m_id, m_info in MEMBERS.items():
         for alias in m_info["aliases"]:
@@ -471,7 +467,6 @@ def detect_target_member(sender_name: str, text: str):
         n_alias = remove_accents(alias)
         target_text = norm_text
 
-        # Loại bỏ các từ gây nhầm lẫn nếu có
         for avoid in m_info.get("avoid_confusions", []):
             target_text = re.sub(r'\b' + re.escape(remove_accents(avoid)) + r'\b', ' ', target_text)
 
@@ -479,10 +474,8 @@ def detect_target_member(sender_name: str, text: str):
         if re.search(pattern, target_text):
             return m_id, m_info
 
-    # KHÔNG FALLBACK THEO KHO
     return None, None
 
-# Hàm bọc để giữ tính tương thích
 def detect_target_sup(sender_name: str, text: str):
     return detect_target_member(sender_name, text)
 
@@ -506,6 +499,11 @@ def handle_sup_webhook(data: dict):
     # Bỏ qua nếu là tin do chính bot gửi
     if any(kw in text for kw in ["XÁC NHẬN CHECK-IN", "NHẮC NHỞ", "CẢNH BÁO 08:00", "BÁO CÁO CHECK-IN"]):
         return {"status": "skipped", "reason": "bot message"}
+
+    # Bỏ qua tin nhắn quote/reply nếu không đính kèm ảnh mới
+    is_quote = bool(data.get("replyTo") or data.get("quote") or data.get("parentMsgId"))
+    if is_quote and not has_photo:
+        return {"status": "skipped", "reason": "quote/reply message without photo"}
 
     # ── 1. KIỂM TRA TIN BÁO NGHỈ / CÔNG TÁC / MIỄN CHECK-IN ──
     is_excuse = bool(re.search(r'(?i)#?off\b|xin\s*nghi|nghi\s*phep|bao\s*vang|cong\s*tac|di\s*hop|xin\s*mien|mien\s*check\s*in', norm_txt))
@@ -549,31 +547,50 @@ def handle_sup_webhook(data: dict):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    # ── 2. KIỂM TRA TIN CHECK-IN (Có từ khóa checkin hoặc gửi kèm ảnh) ──
-    is_checkin = bool(re.search(r'(?i)#?check\s*in|diem\s*danh|kct|ktc|buu\s*cuc|kho|bt|kh|dn|dt|bl|pt|la\s*gi', text) or has_photo)
+    # ── 2. KIỂM TRA TIN CHECK-IN (Chỉ chấp nhận có ẢNH hoặc có từ khóa CHECK-IN rõ ràng) ──
+    has_checkin_keyword = bool(re.search(r'(?i)\b(#?check\s*in|#?checkin|diem\s*danh)\b', text))
+    is_checkin = bool(has_photo or has_checkin_keyword)
     if not is_checkin:
         return {"status": "ignored", "reason": "not checkin message"}
 
+    # Nhận diện nhân sự
     m_id, m_info = detect_target_member(sender_name, text)
     if not m_id:
         return {"status": "ignored", "reason": "cannot identify member for checkin"}
 
-    location = detect_location(text)
-
-    # Đánh giá đúng giờ hay trễ (Chốt hạn trước 08:00)
-    cutoff_time = now.replace(hour=8, minute=0, second=59, microsecond=0)
-    is_on_time = (now <= cutoff_time)
-    if is_on_time:
-        status_label = "✅ Đúng giờ"
-        note_text = "Đúng giờ"
-    else:
-        minutes_late = max(1, int((now - cutoff_time).total_seconds() // 60))
-        status_label = "⚠️ Gửi bù (Trễ)"
-        note_text = f"Trễ {minutes_late} phút"
+    # Nếu người gửi là người ngoài (không thuộc members) mà không có ảnh -> bỏ qua
+    is_sender_member = False
+    norm_sender = remove_accents(sender_name)
+    if norm_sender:
+        for mid_chk, minfo_chk in MEMBERS.items():
+            if any(remove_accents(al) in norm_sender for al in minfo_chk["aliases"]):
+                is_sender_member = True
+                break
+    if not is_sender_member and not has_photo:
+        return {"status": "ignored", "reason": "non-member chat without photo"}
 
     try:
         ws, records = get_today_records(today_display)
         row_idx = records[m_id]["row_idx"]
+        current_status = records[m_id].get("status", "")
+
+        # BẢO VỆ: Nếu người này ĐÃ ĐÚNG GIỜ hoặc ĐÃ MIỄN CHECK-IN hôm nay -> Không ghi đè lại
+        if any(kw in current_status for kw in ["Đúng giờ", "Miễn"]):
+            return {"status": "skipped", "reason": f"{m_info['full_name']} already checked in on-time today"}
+
+        location = detect_location(text)
+
+        # Đánh giá đúng giờ hay trễ (Chốt hạn trước 08:00)
+        cutoff_time = now.replace(hour=8, minute=0, second=59, microsecond=0)
+        is_on_time = (now <= cutoff_time)
+        if is_on_time:
+            status_label = "✅ Đúng giờ"
+            note_text = "Đúng giờ"
+        else:
+            minutes_late = max(1, int((now - cutoff_time).total_seconds() // 60))
+            status_label = "⚠️ Gửi bù (Trễ)"
+            note_text = f"Trễ {minutes_late} phút"
+
         if row_idx:
             update_sup_record(
                 ws,
