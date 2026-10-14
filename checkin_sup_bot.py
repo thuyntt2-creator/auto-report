@@ -232,10 +232,20 @@ def get_location_registry():
         print(f"[WARN] Không thể đọc tab Cơ cấu: {e}")
         return CACHED_LOCATIONS or []
 
+def is_weekend_date_str(date_str: str) -> bool:
+    """Kiểm tra ngày có phải Thứ 7 hoặc Chủ Nhật không (5: Thứ 7, 6: Chủ nhật)."""
+    try:
+        dt = datetime.strptime(date_str, "%d/%m/%Y")
+        return dt.weekday() in [5, 6]
+    except Exception:
+        return get_vn_today().weekday() in [5, 6]
+
 def ensure_today_rows(ws, target_date_str=None):
-    """Đảm bảo có đủ 9 dòng cho 3 SUP và 6 HR trong ngày target_date_str (DD/MM/YYYY)."""
+    """Đảm bảo có đủ dòng cho 3 SUP và 6 HR trong ngày target_date_str (DD/MM/YYYY)."""
     if not target_date_str:
         target_date_str = get_vn_today().strftime("%d/%m/%Y")
+
+    is_weekend = is_weekend_date_str(target_date_str)
 
     rows = ws.get_all_values()
     if not rows:
@@ -256,13 +266,21 @@ def ensure_today_rows(ws, target_date_str=None):
     appended = False
     for m_id, m_info in MEMBERS.items():
         if m_id not in existing_members:
+            # Thứ 7 và Chủ nhật khối HR nghỉ, không bắt buộc điểm danh
+            if is_weekend and m_info["role"] == "HR":
+                init_status = "🏖️ Nghỉ cuối tuần"
+                init_note = "Nghỉ T7/CN"
+            else:
+                init_status = "Chưa check-in"
+                init_note = ""
+
             ws.append_row([
                 target_date_str,
                 m_info["display_name"],
-                "Chưa check-in",
+                init_status,
                 "",
                 "",
-                "",
+                init_note,
                 "",
                 get_vn_now().strftime("%d/%m/%Y %H:%M:%S")
             ])
@@ -622,10 +640,15 @@ def job_remind_0755():
     """07:55 - Nhắc nhở các nhân sự chưa check-in (còn 5 phút trước hạn 08:00)."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
+    is_weekend = now.weekday() in [5, 6]
     try:
         ws, records = get_today_records(today_display)
         missing_members = []
         for m_id, rec in records.items():
+            # Thứ 7 và Chủ nhật khối HR nghỉ, không nhắc nhở
+            if is_weekend and rec.get("role") == "HR":
+                continue
+
             status = rec.get("status", "")
             if "Chưa check-in" in status and not any(kw in status for kw in ["Nghỉ", "Vắng", "Đúng giờ", "Gửi bù", "Miễn"]):
                 missing_members.append(f"{rec['name']} ({rec['role']})")
@@ -645,7 +668,7 @@ def job_remind_0755():
 
         lines.extend([
             "",
-            "👉 <i>Yêu cầu các AM/SUP và HR khẩn trương gửi ảnh TimestampCam kèm vị trí bưu cục/kho vào nhóm nhé!</i>",
+            "👉 <i>Yêu cầu các AM/SUP khẩn trương gửi ảnh TimestampCam kèm vị trí bưu cục/kho vào nhóm nhé!</i>" if is_weekend else "👉 <i>Yêu cầu các AM/SUP và HR khẩn trương gửi ảnh TimestampCam kèm vị trí bưu cục/kho vào nhóm nhé!</i>",
             f"🔗 <a href='https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'>Bảng theo dõi Check-in</a>"
         ])
         send_gtalk_message("\n".join(lines))
@@ -657,10 +680,13 @@ def job_cutoff_0800():
     """08:00 - Cảnh báo quá hạn và yêu cầu nhân sự chưa check-in gửi bù ngay."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
+    is_weekend = now.weekday() in [5, 6]
     try:
         ws, records = get_today_records(today_display)
         overdue_members = []
         for m_id, rec in records.items():
+            if is_weekend and rec.get("role") == "HR":
+                continue
             status = rec.get("status", "")
             if "Chưa check-in" in status:
                 overdue_members.append(f"{rec['name']} ({rec['role']})")
@@ -694,6 +720,7 @@ def job_recap_1100():
     """11:00 - Báo cáo tổng hợp tình hình điểm danh ca sáng của SUP và HR."""
     now = get_vn_now()
     today_display = now.strftime("%d/%m/%Y")
+    is_weekend = now.weekday() in [5, 6]
     try:
         ws, records = get_today_records(today_display)
         lines = [
@@ -739,7 +766,15 @@ def job_recap_1100():
         lines.extend(sup_items if sup_items else ["(Không có dữ liệu)"])
         lines.append("")
         lines.append("💼 <b>KHỐI NHÂN SỰ (HR/HRBP):</b>")
-        lines.extend(hr_items if hr_items else ["(Không có dữ liệu)"])
+        if is_weekend:
+            # Cuối tuần: nếu có HR check-in thì hiển thị, còn không thì hiển thị Nghỉ cuối tuần
+            checked_in = [it for it in hr_items if any(kw in it for kw in ["Đúng giờ", "Gửi bù"])]
+            if checked_in:
+                lines.extend(hr_items)
+            else:
+                lines.append("• <i>🏖️ Nghỉ cuối tuần (Không yêu cầu điểm danh)</i>")
+        else:
+            lines.extend(hr_items if hr_items else ["(Không có dữ liệu)"])
 
         lines.extend([
             "─────────────────────────────",
