@@ -1477,73 +1477,76 @@ def start_scheduler():
         print("⏰ Scheduler đã khởi động: Giám sát các mốc 08:00, 10:00, 11:00, 16:00, 20:00 & 20:15...")
 
         while True:
-            now = get_vn_now()
-            today_str = now.strftime("%Y-%m-%d")
-            hm = now.strftime("%H:%M")
+            try:
+                now = get_vn_now()
+                today_str = now.strftime("%Y-%m-%d")
+                hm = now.strftime("%H:%M")
 
-            config = load_config()
-            cfg_gtalk = config.get("gtalk", {})
-            group_a = cfg_gtalk.get("channel_id_group_a", "2097277790030348288")
-            group_b = cfg_gtalk.get("channel_id_group_b", "2097270568973508608")
+                config = load_config()
+                cfg_gtalk = config.get("gtalk", {})
+                group_a = cfg_gtalk.get("channel_id_group_a", "2097277790030348288")
+                group_b = cfg_gtalk.get("channel_id_group_b", "2097270568973508608")
 
-            # Danh sách mốc cần bắn recap và nhắc nộp bù theo từng Group
-            schedule_map = {
-                "08:00": (1, "Mốc 1 (Đầu ngày)", group_a, "recap"),
-                "08:30": (1, "Mốc 1 (Nhắc nộp bù)", group_a, "reminder"),
-                "10:00": (5, "Mốc 5 (Điểm nóng)", group_b, "recap"),
-                "10:30": (5, "Mốc 5 (Nhắc nộp bù)", group_b, "reminder"),
-                "11:00": (2, "Mốc 2 (Gán TTS Ca 1)", group_a, "recap"),
-                "11:30": (2, "Mốc 2 (Nhắc nộp bù)", group_a, "reminder"),
-                "16:00": (3, "Mốc 3 (Gán TTS Ca 2)", group_a, "recap"),
-                "16:30": (3, "Mốc 3 (Nhắc nộp bù)", group_a, "reminder"),
-                "20:00": (4, "Mốc 4 (LTC TTS)", group_a, "recap"),
-            }
+                # Danh sách mốc cần bắn recap và nhắc nộp bù theo từng Group
+                schedule_map = {
+                    "08:00": (1, "Mốc 1 (Đầu ngày)", group_a, "recap"),
+                    "08:30": (1, "Mốc 1 (Nhắc nộp bù)", group_a, "reminder"),
+                    "10:00": (5, "Mốc 5 (Điểm nóng)", group_b, "recap"),
+                    "10:30": (5, "Mốc 5 (Nhắc nộp bù)", group_b, "reminder"),
+                    "11:00": (2, "Mốc 2 (Gán TTS Ca 1)", group_a, "recap"),
+                    "11:30": (2, "Mốc 2 (Nhắc nộp bù)", group_a, "reminder"),
+                    "16:00": (3, "Mốc 3 (Gán TTS Ca 2)", group_a, "recap"),
+                    "16:30": (3, "Mốc 3 (Nhắc nộp bù)", group_a, "reminder"),
+                    "20:00": (4, "Mốc 4 (LTC TTS)", group_a, "recap"),
+                }
 
-            if hm in schedule_map:
-                m_id, label, target_group, action_type = schedule_map[hm]
-                trigger_key = f"{today_str}_{m_id}_{action_type}"
-                if trigger_key not in last_triggered:
-                    last_triggered[trigger_key] = True
-                    print(f"\n[{now.strftime('%H:%M:%S')}] 🔔 Kích hoạt {label} tại Group {target_group}!")
-                    if action_type == "recap":
-                        msg = generate_milestone_recap(m_id)
-                    else:
-                        msg = generate_milestone_reminder(m_id)
-
-                    if msg:
-                        ok, err = send_gtalk_message(msg, channel_id=target_group)
-                        if ok:
-                            print(f"✅ Đã gửi {label} lên GTalk Group {target_group} thành công!")
+                if hm in schedule_map:
+                    m_id, label, target_group, action_type = schedule_map[hm]
+                    trigger_key = f"{today_str}_{m_id}_{action_type}"
+                    if trigger_key not in last_triggered:
+                        last_triggered[trigger_key] = True
+                        print(f"\n[{now.strftime('%H:%M:%S')}] 🔔 Kích hoạt {label} tại Group {target_group}!")
+                        if action_type == "recap":
+                            msg = generate_milestone_recap(m_id)
                         else:
-                            print(f"❌ Lỗi bắn GTalk: {err}")
-                    else:
-                        print(f"ℹ️ Không có AM nào thiếu báo cáo cho {label}, bỏ qua gửi tin.")
+                            msg = generate_milestone_reminder(m_id)
 
-            # Chốt sổ cả ngày lúc 20:15 (Ưu tiên gửi ảnh Dashboard cực nét, fallback text nếu lỗi)
-            if hm == "20:15":
-                daily_key = f"{today_str}_daily"
-                if daily_key not in last_triggered:
-                    last_triggered[daily_key] = True
-                    print(f"\n[{now.strftime('%H:%M:%S')}] 🏆 Kích hoạt bảng tổng hợp phạt Daily N+1!")
-                    sent_image = False
-                    try:
-                        from render_daily_recap_card import send_daily_attendance_recap_image
-                        ok_img, err_img = send_daily_attendance_recap_image()
-                        if ok_img:
-                            sent_image = True
-                            print("✅ Đã bắn ẢNH bảng chốt sổ Daily N+1 lên GTalk thành công!")
+                        if msg:
+                            ok, err = send_gtalk_message(msg, channel_id=target_group)
+                            if ok:
+                                print(f"✅ Đã gửi {label} lên GTalk Group {target_group} thành công!")
+                            else:
+                                print(f"❌ Lỗi bắn GTalk: {err}")
                         else:
-                            print(f"⚠️ Không gửi được ảnh: {err_img}, chuyển sang gửi text.")
-                    except Exception as e_img:
-                        print(f"⚠️ Lỗi render ảnh ({e_img}), chuyển sang gửi text.")
+                            print(f"ℹ️ Không có AM nào thiếu báo cáo cho {label}, bỏ qua gửi tin.")
 
-                    if not sent_image:
-                        msg = generate_daily_recap()
-                        ok, err = send_gtalk_message(msg)
-                        if ok:
-                            print("✅ Đã bắn bảng chốt sổ Daily N+1 (Text) lên GTalk thành công!")
-                        else:
-                            print(f"❌ Lỗi bắn GTalk: {err}")
+                # Chốt sổ cả ngày lúc 20:15 (Ưu tiên gửi ảnh Dashboard cực nét, fallback text nếu lỗi)
+                if hm == "20:15":
+                    daily_key = f"{today_str}_daily"
+                    if daily_key not in last_triggered:
+                        last_triggered[daily_key] = True
+                        print(f"\n[{now.strftime('%H:%M:%S')}] 🏆 Kích hoạt bảng tổng hợp phạt Daily N+1!")
+                        sent_image = False
+                        try:
+                            from render_daily_recap_card import send_daily_attendance_recap_image
+                            ok_img, err_img = send_daily_attendance_recap_image()
+                            if ok_img:
+                                sent_image = True
+                                print("✅ Đã bắn ẢNH bảng chốt sổ Daily N+1 lên GTalk thành công!")
+                            else:
+                                print(f"⚠️ Không gửi được ảnh: {err_img}, chuyển sang gửi text.")
+                        except Exception as e_img:
+                            print(f"⚠️ Lỗi render ảnh ({e_img}), chuyển sang gửi text.")
+
+                        if not sent_image:
+                            msg = generate_daily_recap()
+                            ok, err = send_gtalk_message(msg)
+                            if ok:
+                                print("✅ Đã bắn bảng chốt sổ Daily N+1 (Text) lên GTalk thành công!")
+                            else:
+                                print(f"❌ Lỗi bắn GTalk: {err}")
+            except Exception as e_loop:
+                print(f"⚠️ Lỗi trong scheduler_loop: {e_loop}")
 
             time.sleep(20)
 

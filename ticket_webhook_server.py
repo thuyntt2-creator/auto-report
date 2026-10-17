@@ -543,6 +543,30 @@ def admin_fix_thuy_chi_today():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/admin/fix_nhi_today", methods=["GET", "POST"])
+def admin_fix_nhi_today():
+    try:
+        from diem_danh_bot import get_db, get_vn_today
+        from sync_attendance_sheets import sync_daily_to_sheet
+        today_str = get_vn_today().strftime("%Y-%m-%d")
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_nhi_pny', 'Phan Nguyễn Yến Nhi', 4, ? || ' 19:19:58', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = ? || ' 19:19:58',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str, today_str, today_str))
+            conn.commit()
+        sync_daily_to_sheet(get_vn_today())
+        return jsonify({"status": "ok", "message": "Fixed AM Nhi M4 ON_TIME for today"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/fix_nghia_m1", methods=["GET", "POST"])
 @app.route("/admin/fix_nghia_today", methods=["GET", "POST"])
 def admin_fix_nghia_m1():
