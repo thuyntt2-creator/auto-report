@@ -551,6 +551,19 @@ def admin_fix_nhi_today():
         today_str = get_vn_today().strftime("%Y-%m-%d")
         with get_db() as conn:
             cur = conn.cursor()
+            # M3: 15:35:50
+            cur.execute("""
+            INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
+            VALUES (?, 'am_nhi_pny', 'Phan Nguyễn Yến Nhi', 3, ? || ' 15:35:50', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(date, am_id, milestone_id) DO UPDATE SET
+                submitted_at = ? || ' 15:35:50',
+                status = 'ON_TIME',
+                late_minutes = 0,
+                penalty_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            """, (today_str, today_str, today_str))
+
+            # M4: 19:19:58
             cur.execute("""
             INSERT INTO attendance_records (date, am_id, am_name, milestone_id, submitted_at, status, late_minutes, penalty_amount, updated_at)
             VALUES (?, 'am_nhi_pny', 'Phan Nguyễn Yến Nhi', 4, ? || ' 19:19:58', 'ON_TIME', 0, 0, CURRENT_TIMESTAMP)
@@ -563,7 +576,7 @@ def admin_fix_nhi_today():
             """, (today_str, today_str, today_str))
             conn.commit()
         sync_daily_to_sheet(get_vn_today())
-        return jsonify({"status": "ok", "message": "Fixed AM Nhi M4 ON_TIME for today"})
+        return jsonify({"status": "ok", "message": "Fixed AM Nhi M3 and M4 ON_TIME for today"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

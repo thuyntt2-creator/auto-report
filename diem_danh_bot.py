@@ -859,26 +859,37 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
             if prev_row and prev_row["detected_milestone"]:
                 old_m_id = prev_row["detected_milestone"]
                 if old_m_id != m_id:
-                    print(f"🔄 AM {am_name} đã sửa tin nhắn từ Mốc {old_m_id} sang Mốc {m_id}. Tự động dọn bản ghi Mốc {old_m_id} cũ.")
+                    print(f"🔄 AM {am_name} đã sửa tin nhắn từ Mốc {old_m_id} sang Mốc {m_id}.")
+                    # KIỂM TRA: Chỉ xóa mốc cũ nếu AM này KHÔNG có tin nhắn hợp lệ nào khác cho old_m_id trong ngày!
                     cur.execute("""
-                    DELETE FROM attendance_records
-                    WHERE date = ? AND am_id = ? AND milestone_id = ?
-                    """, (today_str, am_id, old_m_id))
-                    try:
-                        from sync_attendance_sheets import get_sheet_client, SPREADSHEET_ID, SHEET_TITLE
-                        gc = get_sheet_client()
-                        sh = gc.open_by_key(SPREADSHEET_ID)
-                        ws = sh.worksheet(SHEET_TITLE)
-                        cells = ws.findall(am_name)
-                        date_display = submit_time.strftime("%d/%m/%Y")
-                        for cell in cells:
-                            row_vals = ws.row_values(cell.row)
-                            if len(row_vals) > 0 and date_display in row_vals[0]:
-                                col_idx = 4 + (old_m_id - 1)
-                                ws.update_cell(cell.row, col_idx, "❌ Chưa nộp (100k)")
-                                break
-                    except Exception as e_sheet:
-                        print(f"⚠️ Sheet reset cell error: {e_sheet}")
+                    SELECT id, evaluation_status, received_at FROM raw_messages
+                    WHERE message_id != ? AND detected_am_id = ? AND detected_milestone = ? AND received_at LIKE ?
+                    ORDER BY id DESC LIMIT 1
+                    """, (msg_id, am_id, old_m_id, f"{today_str}%"))
+                    other_valid = cur.fetchone()
+                    if not other_valid:
+                        print(f"🧹 Không có tin nhắn khác cho Mốc {old_m_id}, dọn bản ghi cũ.")
+                        cur.execute("""
+                        DELETE FROM attendance_records
+                        WHERE date = ? AND am_id = ? AND milestone_id = ?
+                        """, (today_str, am_id, old_m_id))
+                        try:
+                            from sync_attendance_sheets import get_sheet_client, SPREADSHEET_ID, SHEET_TITLE
+                            gc = get_sheet_client()
+                            sh = gc.open_by_key(SPREADSHEET_ID)
+                            ws = sh.worksheet(SHEET_TITLE)
+                            cells = ws.findall(am_name)
+                            date_display = submit_time.strftime("%d/%m/%Y")
+                            for cell in cells:
+                                row_vals = ws.row_values(cell.row)
+                                if len(row_vals) > 0 and date_display in row_vals[0]:
+                                    col_idx = 4 + (old_m_id - 1)
+                                    ws.update_cell(cell.row, col_idx, "❌ Chưa nộp (100k)")
+                                    break
+                        except Exception as e_sheet:
+                            print(f"⚠️ Sheet reset cell error: {e_sheet}")
+                    else:
+                        print(f"🛡️ AM {am_name} đã có tin nhắn hợp lệ khác cho Mốc {old_m_id}, giữ nguyên không xóa.")
 
             # Kiểm tra xem AM này đã có bản ghi nào trước đó chưa
             cur.execute("""
