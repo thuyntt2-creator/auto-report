@@ -342,14 +342,15 @@ def send_gtalk_message(text: str, channel_id: str = GTALK_CHANNEL_ID, oa_token: 
         "content": {"parseMode": "HTML", "text": text},
         "oaToken": oa_token,
     }
-    try:
-        r = requests.post(GTALK_API_URL, json=payload, timeout=15, verify=False)
-        res = r.json() if r.status_code == 200 else {}
-        if r.status_code == 200 and res.get("errorCode") == "success":
-            return True, "OK"
-        return False, f"HTTP {r.status_code} - {r.text[:200]}"
-    except Exception as e:
-        return False, str(e)
+    for target in ["http://103.82.27.107:5056", GTALK_API_URL]:
+        try:
+            r = requests.post(target, json=payload, timeout=6, verify=False)
+            res = r.json() if r.status_code == 200 else {}
+            if r.status_code == 200 and res.get("errorCode") == "success":
+                return True, "OK"
+        except Exception:
+            pass
+    return False, "Failed to send message via VPS proxy and direct"
 
 # ─── PARSE PAYLOAD TIN NHẮN & ẢNH GTALK ─────────────────────
 

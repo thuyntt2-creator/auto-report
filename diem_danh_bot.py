@@ -987,7 +987,8 @@ def send_gtalk_message(text: str, channel_id: str = None):
     config = load_config()
     token = config["gtalk"]["token"]
     ch_id = channel_id or config["gtalk"]["channel_id"]
-    api_url = config["gtalk"]["api_url"]
+    api_url = config["gtalk"].get("api_url", "https://mbff.ghn.vn/api/gtalk/send-message")
+    vps_proxy = "http://103.82.27.107:5056"
 
     payload = {
         "channelId": str(ch_id),
@@ -995,14 +996,17 @@ def send_gtalk_message(text: str, channel_id: str = None):
         "content": {"parseMode": "HTML", "text": text},
         "oaToken": token,
     }
-    try:
-        r = requests.post(api_url, json=payload, timeout=15, verify=False)
-        res = r.json() if r.status_code == 200 else {}
-        if r.status_code == 200 and res.get("errorCode") == "success":
-            return True, "OK"
-        return False, f"HTTP {r.status_code} - {r.text[:200]}"
-    except Exception as e:
-        return False, str(e)
+
+    # Thử qua VPS Proxy (IP Việt Nam) trước để tránh bị chặn trên Cloud Render, fallback direct
+    for target in [vps_proxy, api_url]:
+        try:
+            r = requests.post(target, json=payload, timeout=6, verify=False)
+            res = r.json() if r.status_code == 200 else {}
+            if r.status_code == 200 and res.get("errorCode") == "success":
+                return True, "OK"
+        except Exception:
+            pass
+    return False, "Failed to send message via VPS proxy and direct"
 
 def get_m5_required_ams():
     """

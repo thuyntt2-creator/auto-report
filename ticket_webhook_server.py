@@ -248,18 +248,19 @@ def send_gtalk(group_id: str, text: str, oa_token: str):
         "content": {"parseMode": "HTML", "text": text},
         "oaToken": oa_token,
     }
-    try:
-        r = requests.post(GTALK_API_URL, json=payload, timeout=15, verify=False)
-        res = {}
+    for target in ["http://103.82.27.107:5056", GTALK_API_URL]:
         try:
-            res = r.json()
+            r = requests.post(target, json=payload, timeout=6, verify=False)
+            res = {}
+            try:
+                res = r.json()
+            except Exception:
+                pass
+            if r.status_code == 200 and res.get("errorCode") == "success":
+                return True, "OK"
         except Exception:
             pass
-        if r.status_code == 200 and res.get("errorCode") == "success":
-            return True, "OK"
-        return False, f"HTTP {r.status_code} - {r.text[:200]}"
-    except Exception as e:
-        return False, str(e)
+    return False, "Failed to send gtalk via VPS proxy and direct"
 
 
 def build_message(header: str, raw_line: str) -> str:
