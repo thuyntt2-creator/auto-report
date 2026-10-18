@@ -580,6 +580,15 @@ def admin_fix_nhi_today():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/debug/test_gtalk_conn", methods=["GET"])
+def debug_test_gtalk_conn():
+    try:
+        from diem_danh_bot import send_gtalk_message
+        ok, err = send_gtalk_message("test", channel_id="999999999")
+        return jsonify({"status": "ok", "gtalk_ok": ok, "gtalk_err": str(err)})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route("/admin/fix_nghia_m1", methods=["GET", "POST"])
 @app.route("/admin/fix_nghia_today", methods=["GET", "POST"])
 def admin_fix_nghia_m1():
@@ -816,9 +825,17 @@ def webhook():
             group_b_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_b") or "2097270568973508608")
             group_a_id = str(cfg_am.get("gtalk", {}).get("channel_id_group_a") or "2097277790030348288")
 
-            # Luôn phản hồi tại đúng group mà tin nhắn được gửi đến
             reply_channel = channel_id or (group_b_id if res_dd.get("milestone_id") == 5 else group_a_id)
-            send_gtalk_message(confirm_msg, reply_channel)
+            ok_snd, err_snd = send_gtalk_message(confirm_msg, reply_channel)
+            print(f"[{ts}] Phản hồi xác nhận GTalk ({reply_channel}): ok={ok_snd}, err={err_snd}")
+            recent_logs.append({
+                "time": ts,
+                "action": "send_confirm",
+                "ok": ok_snd,
+                "err": str(err_snd),
+                "channel": reply_channel,
+                "am": res_dd['am_name']
+            })
 
             # Tự động đồng bộ thời gian thực lên Google Sheet
             try:
