@@ -1,0 +1,386 @@
+{
+  "1909": {
+    "bc": "Kho Trung Chuyển Khánh Hòa",
+    "am": "Nguyễn Tiến Lực"
+  },
+  "20336000": {
+    "bc": "Kho Chuyển Tiếp Đức Trọng-Lâm Đồng",
+    "am": "Nguyễn Minh Hoàng"
+  },
+  "20797000": {
+    "bc": "Kho Chuyển Tiếp Đắk Nông",
+    "am": "Nguyễn Tiến Lực"
+  },
+  "20745000": {
+    "bc": "Kho Chuyển Tiếp Bình Thuận",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "22915000": {
+    "bc": "Kho Chuyển Tiếp Bảo Lộc-Lâm Đồng",
+    "am": "Nguyễn Minh Hoàng"
+  },
+  "22357000": {
+    "bc": "(NTH) Thuận Nam",
+    "am": "Nguyễn Duy Long"
+  },
+  "20499000": {
+    "bc": "(NTH) Phước Dinh",
+    "am": "Nguyễn Duy Long"
+  },
+  "22861000": {
+    "bc": "(NTH) Phan Rang",
+    "am": "Nguyễn Duy Long"
+  },
+  "20316000": {
+    "bc": "(NTH) Ninh Sơn",
+    "am": "Nguyễn Duy Long"
+  },
+  "20648000": {
+    "bc": "(NTH) Ninh Chử",
+    "am": "Nguyễn Duy Long"
+  },
+  "22263000": {
+    "bc": "(NTH) ĐL Xuân Hải",
+    "am": "Nguyễn Duy Long"
+  },
+  "22356000": {
+    "bc": "(NTH) ĐL Ninh Phước",
+    "am": "Nguyễn Duy Long"
+  },
+  "22357001": {
+    "bc": "(NTH) ĐL Cà Ná",
+    "am": "Nguyễn Duy Long"
+  },
+  "20150000": {
+    "bc": "(NTH) Bảo An",
+    "am": "Nguyễn Duy Long"
+  },
+  "22116000": {
+    "bc": "(LDO) Xuân Trường - Đà Lạt",
+    "am": "Lê Văn Trường"
+  },
+  "21126000": {
+    "bc": "(LDO) Xuân Hương - Đà Lạt",
+    "am": "Lê Văn Trường"
+  },
+  "22425000": {
+    "bc": "(LDO) Tân Hà Lâm Hà",
+    "am": "Huỳnh Thị Kim Chi"
+  },
+  "20849000": {
+    "bc": "(LDO) Ninh Gia",
+    "am": "Nguyễn Thị Tuyết Thơ"
+  },
+  "21458000": {
+    "bc": "(LDO) Nam Ban Lâm Hà",
+    "am": "Huỳnh Thị Kim Chi"
+  },
+  "21687000": {
+    "bc": "(LDO) Lang Biang - Đà Lạt 2",
+    "am": "Lê Văn Trường"
+  },
+  "22051000": {
+    "bc": "(LDO) Lang Biang - Đà Lạt 1",
+    "am": "Lê Minh Lợi"
+  },
+  "21537000": {
+    "bc": "(LDO) Lâm Viên - Đà Lạt 2",
+    "am": "Lê Văn Trường"
+  },
+  "22312000": {
+    "bc": "(LDO) Lâm Viên - Đà Lạt 1",
+    "am": "Lê Văn Trường"
+  },
+  "22759000": {
+    "bc": "(LDO) Hòa Ninh",
+    "am": "Hồng Bích Nga"
+  },
+  "22255000": {
+    "bc": "(LDO) Hiệp Thạnh",
+    "am": "Nguyễn Thị Tuyết Thơ"
+  },
+  "21516000": {
+    "bc": "(LDO) Đức Trọng 2",
+    "am": "Nguyễn Thị Tuyết Thơ"
+  },
+  "22389000": {
+    "bc": "(LDO) Đức Trọng 1",
+    "am": "Nguyễn Lê Nguyên Vũ"
+  },
+  "21377000": {
+    "bc": "(LDO) Đơn Dương",
+    "am": "Lê Văn Trường"
+  },
+  "21294000": {
+    "bc": "(LDO) Đinh Văn Lâm Hà",
+    "am": "Huỳnh Thị Kim Chi"
+  },
+  "20942000": {
+    "bc": "(LDO) Di Linh",
+    "am": "Nguyễn Lê Nguyên Vũ"
+  },
+  "20670000": {
+    "bc": "(LDO) Đam Rông 3",
+    "am": "Huỳnh Thị Kim Chi"
+  },
+  "20663000": {
+    "bc": "(LDO) Đạ Tẻh",
+    "am": "Nguyễn Đỗ Minh Nghĩa"
+  },
+  "1896": {
+    "bc": "(LDO) Đạ Huoai",
+    "am": "Nguyễn Đỗ Minh Nghĩa"
+  },
+  "20669000": {
+    "bc": "(LDO) Cát Tiên",
+    "am": "Nguyễn Đỗ Minh Nghĩa"
+  },
+  "23015000": {
+    "bc": "(LDO) Bảo Lâm 3",
+    "am": "Hồng Bích Nga"
+  },
+  "22222000": {
+    "bc": "(LDO) Bảo Lâm 1",
+    "am": "Hồng Bích Nga"
+  },
+  "20785000": {
+    "bc": "(LDO) B'Lao",
+    "am": "Hồng Bích Nga"
+  },
+  "21468000": {
+    "bc": "(LDO) 3 Bảo Lộc",
+    "am": "Nguyễn Lê Nguyên Vũ"
+  },
+  "21688000": {
+    "bc": "(LDO) 1 Bảo Lộc",
+    "am": "Hồng Bích Nga"
+  },
+  "21046000": {
+    "bc": "(KHO) Vạn Ninh",
+    "am": "Phan Đình Duy"
+  },
+  "21722000": {
+    "bc": "(KHO) Tu Bông",
+    "am": "Phan Đình Duy"
+  },
+  "20320000": {
+    "bc": "(KHO) Tây Nha Trang",
+    "am": "Phan Đình Duy"
+  },
+  "20543000": {
+    "bc": "(KHO) Ninh Hòa 2",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "20694000": {
+    "bc": "(KHO) Ninh Hòa 1",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "20495000": {
+    "bc": "(KHO) Nha Trang",
+    "am": "Phan Đình Duy"
+  },
+  "2502": {
+    "bc": "(KHO) Nam Nha Trang 5",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "22363000": {
+    "bc": "(KHO) Nam Nha Trang 3",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "22704000": {
+    "bc": "(KHO) Nam Nha Trang 2",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "22746000": {
+    "bc": "(KHO) Nam Nha Trang 1",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "20558000": {
+    "bc": "(KHO) Khánh Vĩnh",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "20784000": {
+    "bc": "(KHO) Khánh Sơn",
+    "am": "Phan Đình Duy"
+  },
+  "21569000": {
+    "bc": "(KHO) Đông Ninh Hòa",
+    "am": "Phan Đình Duy"
+  },
+  "22793000": {
+    "bc": "(KHO) Diên Thọ",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "20143000": {
+    "bc": "(KHO) Diên Khánh 2",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "22774000": {
+    "bc": "(KHO) Diên Khánh 1",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "23098000": {
+    "bc": "(KHO) CK Diên Điền",
+    "am": "Phan Đình Duy"
+  },
+  "23123000": {
+    "bc": "(KHO) CK Bắc Nha Trang",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "22830000": {
+    "bc": "(KHO) Cam Linh",
+    "am": "Nguyễn Thanh Long"
+  },
+  "20588000": {
+    "bc": "(KHO) Cam Lâm 2",
+    "am": "Nguyễn Thanh Long"
+  },
+  "21331000": {
+    "bc": "(KHO) Cam Lâm 1",
+    "am": "Nguyễn Hoàng Phi"
+  },
+  "2399": {
+    "bc": "(KHO) Bắc Nha Trang",
+    "am": "Thái Thị Thanh Thư"
+  },
+  "21479000": {
+    "bc": "(KHO) Bắc Cam Ranh",
+    "am": "Nguyễn Thanh Long"
+  },
+  "20590000": {
+    "bc": "(DNO) Tuy Đức",
+    "am": "Trần Thị Nhung"
+  },
+  "22086000": {
+    "bc": "(DNO) Trường Xuân",
+    "am": "Trần Thị Nhung"
+  },
+  "22394000": {
+    "bc": "(DNO) Quảng Tín",
+    "am": "Trương Quang Linh"
+  },
+  "21150000": {
+    "bc": "(DNO) Quảng Sơn",
+    "am": "Trần Thị Nhung"
+  },
+  "21364000": {
+    "bc": "(DNO) Quảng Khê",
+    "am": "Trần Thị Nhung"
+  },
+  "20269003": {
+    "bc": "(DNO) Nhân Cơ",
+    "am": "Lê Hồng Phong"
+  },
+  "20591000": {
+    "bc": "(DNO) Krông Nô",
+    "am": "Trần Thị Nhung"
+  },
+  "20269000": {
+    "bc": "(DNO) Kiến Đức",
+    "am": "Hồng Bích Nga"
+  },
+  "2309": {
+    "bc": "(DNO) Đức Lập",
+    "am": "Trần Thị Nhung"
+  },
+  "21477000": {
+    "bc": "(DNO) Đức An",
+    "am": "Trần Thị Nhung"
+  },
+  "22048000": {
+    "bc": "(DNO) Đông Gia Nghĩa",
+    "am": "Lê Hồng Phong"
+  },
+  "22048001": {
+    "bc": "(DNO) ĐL Nam Gia Nghĩa 2",
+    "am": "Lê Hồng Phong"
+  },
+  "21659000": {
+    "bc": "(DNO) ĐL Nam Gia Nghĩa",
+    "am": "Trần Thị Nhung"
+  },
+  "20673000": {
+    "bc": "(DNO) Cư Jút",
+    "am": "Trần Thị Nhung"
+  },
+  "22242000": {
+    "bc": "(DNO) Bắc Gia Nghĩa",
+    "am": "Lê Hồng Phong"
+  },
+  "21290000": {
+    "bc": "(BTH) Tuyên Quang",
+    "am": "Lê Thanh Nhựt"
+  },
+  "21067000": {
+    "bc": "(BTH) Tân Hải",
+    "am": "Cao Thị Thanh Thủy"
+  },
+  "21594000": {
+    "bc": "(BTH) Phước Hội",
+    "am": "Cao Thị Thanh Thủy"
+  },
+  "21320000": {
+    "bc": "(BTH) Phú Thủy",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "22452000": {
+    "bc": "(BTH) Phú Quý",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "22549000": {
+    "bc": "(BTH) Phan Rí Cửa",
+    "am": "Nguyễn Duy Long"
+  },
+  "20144000": {
+    "bc": "(BTH) Mũi Né",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "22934000": {
+    "bc": "(BTH) Lương Sơn",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "21298000": {
+    "bc": "(BTH) Liên Hương",
+    "am": "Nguyễn Duy Long"
+  },
+  "21065000": {
+    "bc": "(BTH) Hàm Thuận Nam",
+    "am": "Cao Thị Thanh Thủy"
+  },
+  "22483000": {
+    "bc": "(BTH) Hàm Thuận",
+    "am": "Lê Thanh Nhựt"
+  },
+  "21396000": {
+    "bc": "(BTH) Hàm Thắng",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "20687000": {
+    "bc": "(BTH) Hàm Tân",
+    "am": "Cao Thị Thanh Thủy"
+  },
+  "21403000": {
+    "bc": "(BTH) Hàm Liêm",
+    "am": "Lê Thanh Nhựt"
+  },
+  "21456000": {
+    "bc": "(BTH) Đức Linh",
+    "am": "Lê Thanh Nhựt"
+  },
+  "2357": {
+    "bc": "(BTH) Đồng Kho",
+    "am": "Lê Thanh Nhựt"
+  },
+  "22329000": {
+    "bc": "(BTH) ĐL Trà Tân",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "20633000": {
+    "bc": "(BTH) Bắc Bình",
+    "am": "Nguyễn Ngọc Khánh"
+  },
+  "23189000": {
+    "bc": "(LDO) D'Ran",
+    "am": "Lê Văn Trường"
+  }
+}
