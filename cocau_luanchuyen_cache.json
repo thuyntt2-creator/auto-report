@@ -85,7 +85,7 @@
   },
   "21537000": {
     "bc": "(LDO) Lâm Viên - Đà Lạt 2",
-    "am": "Lê Văn Trường"
+    "am": "Trần Nguyễn Huyền Trang"
   },
   "22312000": {
     "bc": "(LDO) Lâm Viên - Đà Lạt 1",
@@ -165,23 +165,19 @@
   },
   "20320000": {
     "bc": "(KHO) Tây Nha Trang",
-    "am": "Phan Đình Duy"
+    "am": "Thái Thị Thanh Thư"
   },
   "20543000": {
     "bc": "(KHO) Ninh Hòa 2",
     "am": "Nguyễn Hoàng Phi"
   },
   "20694000": {
-    "bc": "(KHO) Ninh Hòa 1",
+    "bc": "(KHO) Tân Định",
     "am": "Nguyễn Hoàng Phi"
   },
   "20495000": {
     "bc": "(KHO) Nha Trang",
     "am": "Phan Đình Duy"
-  },
-  "2502": {
-    "bc": "(KHO) Nam Nha Trang 5",
-    "am": "Thái Thị Thanh Thư"
   },
   "22363000": {
     "bc": "(KHO) Nam Nha Trang 3",
@@ -218,10 +214,6 @@
   "22774000": {
     "bc": "(KHO) Diên Khánh 1",
     "am": "Nguyễn Hoàng Phi"
-  },
-  "23098000": {
-    "bc": "(KHO) CK Diên Điền",
-    "am": "Phan Đình Duy"
   },
   "23123000": {
     "bc": "(KHO) CK Bắc Nha Trang",
@@ -266,10 +258,6 @@
   "21364000": {
     "bc": "(DNO) Quảng Khê",
     "am": "Trần Thị Nhung"
-  },
-  "20269003": {
-    "bc": "(DNO) Nhân Cơ",
-    "am": "Lê Hồng Phong"
   },
   "20591000": {
     "bc": "(DNO) Krông Nô",
@@ -381,6 +369,14 @@
   },
   "23189000": {
     "bc": "(LDO) D'Ran",
-    "am": "Lê Văn Trường"
+    "am": "Phan Nguyễn Yến Nhi"
+  },
+  "23205000": {
+    "bc": "(DNO) Nhân Cơ 1",
+    "am": "Lê Hồng Phong"
+  },
+  "23213000": {
+    "bc": "(KHO) Nam Nha Trang",
+    "am": "Thái Thị Thanh Thư"
   }
 }

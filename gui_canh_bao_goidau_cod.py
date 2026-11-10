@@ -19,6 +19,7 @@ import sys
 import time
 import glob
 import argparse
+from datetime import datetime
 import unicodedata
 import requests
 import urllib3
@@ -64,16 +65,19 @@ RAW_AM_CHANNELS = {
     "Trương Quang Linh": "2094079475020627968",
     "Lê Minh Lợi": "2094079507615027200",
     "Nguyễn Đỗ Minh Nghĩa": "2100062122691026944",
-    "Phan Nguyễn Yến Nhi": "2105595062412402688"
+    "Phan Nguyễn Yến Nhi": "2105595062412402688",
+    "Trần Nguyễn Huyền Trang": "2117087306460262400",
 }
 
 AM_CHANNELS = {normalize_text(k): v for k, v in RAW_AM_CHANNELS.items()}
 
 def get_latest_excel_file():
-    """Tự động tìm file cảnh báo gối đầu COD mới nhất trong Downloads hoặc thư mục hiện tại"""
+    """Tự động tìm file cảnh báo gối đầu COD của ngày hôm nay trong Downloads hoặc thư mục hiện tại"""
+    today_str = datetime.now().strftime("%Y%m%d")
     patterns = [
-        os.path.join(os.path.expanduser("~"), "Downloads", "Bao_Cao_Canh_Bao_Goi_Dau_COD_*.xlsx"),
-        os.path.join(BASE_DIR, "Bao_Cao_Canh_Bao_Goi_Dau_COD_*.xlsx")
+        os.path.join(os.path.expanduser("~"), "Downloads", f"Bao_Cao_Canh_Bao_Goi_Dau_COD_{today_str}_*.xlsx"),
+        os.path.join(BASE_DIR, f"Bao_Cao_Canh_Bao_Goi_Dau_COD_{today_str}_*.xlsx"),
+        os.path.join(BASE_DIR, "downloads", f"Bao_Cao_Canh_Bao_Goi_Dau_COD_{today_str}_*.xlsx")
     ]
     candidates = []
     for pat in patterns:
@@ -240,6 +244,7 @@ def main():
     parser.add_argument("--file", help="Đường dẫn file Excel cảnh báo COD.")
     parser.add_argument("--sheet", action="store_true", help="Lấy dữ liệu trực tiếp từ Google Sheet")
     parser.add_argument("--dry-run", action="store_true", help="Xem trước nội dung tin nhắn cảnh báo, không gửi GTalk thật")
+    parser.add_argument("--am", help="Chỉ gửi cho đích danh 1 AM (vd: 'Phan Nguyễn Yến Nhi' hoặc 'Nhi')")
     args = parser.parse_args()
     
     if args.sheet:
@@ -249,8 +254,8 @@ def main():
         if excel_path and os.path.exists(excel_path):
             df_bc, df_nv, df_detail = load_data_from_excel(excel_path)
         else:
-            print("⚠️ Không tìm thấy file Excel hợp lệ. Tự động chuyển sang đọc từ Google Sheet...")
-            df_bc, df_nv, df_detail = load_data_from_sheet()
+            print("❌ Không tìm thấy file Excel hợp lệ của ngày hôm nay. HỦY GỬI TIN NHẮN ĐỂ TRÁNH GỬI TRÙNG DỮ LIỆU CŨ!")
+            sys.exit(1)
     
     am_links = sync_and_split_sheet_by_am(df_detail)
     
@@ -260,6 +265,8 @@ def main():
     for am_name in df_bc['AM Quản Lý'].unique():
         am_name_clean = str(am_name).strip()
         if not am_name_clean or am_name_clean.lower() == 'nan':
+            continue
+        if args.am and args.am.lower() not in am_name_clean.lower():
             continue
             
         channel_id = AM_CHANNELS.get(am_name_clean)

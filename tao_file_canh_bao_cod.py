@@ -38,26 +38,27 @@ DASHBOARD_API_URL = "https://strongly-restrict-ads-massage.trycloudflare.com/api
 
 
 def fetch_report_content():
-    """Lấy dữ liệu bóc tách Mục #16 từ API Dashboard"""
+    """Lấy dữ liệu bóc tách Mục #16 từ API Dashboard với cơ chế retry 3 lần"""
     print("📡 Đang kết nối lấy dữ liệu phân tích Lastmile từ Dashboard Mục #16...")
-    try:
-        r = requests.get(DASHBOARD_API_URL, timeout=15)
-        if r.status_code == 200:
-            data = r.json()
-            content = data.get("content", "")
-            if content and "CẢNH BÁO NGUY CƠ GỐI ĐẦU COD" in content:
-                print(f"✅ Đã tải thành công dữ liệu ({len(content):,} ký tự).")
-                return content
-    except Exception as e:
-        print(f"⚠️ Lỗi kết nối Dashboard API: {e}")
+    for attempt in range(1, 4):
+        try:
+            print(f"  [Lần {attempt}/3] Đang gọi Dashboard API...")
+            r = requests.get(DASHBOARD_API_URL, timeout=25)
+            if r.status_code == 200:
+                data = r.json()
+                content = data.get("content", "")
+                if content and "CẢNH BÁO NGUY CƠ GỐI ĐẦU COD" in content:
+                    print(f"✅ Đã tải thành công dữ liệu mới nhất ({len(content):,} ký tự).")
+                    return content
+            else:
+                print(f"  ⚠️ Dashboard API trả về HTTP {r.status_code}")
+        except Exception as e:
+            print(f"  ⚠️ Lỗi kết nối Dashboard API (lần {attempt}): {e}")
+        
+        if attempt < 3:
+            time.sleep(3)
 
-    # Fallback to local snapshot if network fails
-    local_preview = os.path.join(BASE_DIR, "scratch", "preview_16_full.txt")
-    if os.path.exists(local_preview):
-        print("📂 Đang sử dụng dữ liệu snapshot dự phòng từ máy...")
-        with open(local_preview, "r", encoding="utf-8") as f:
-            return f.read()
-
+    print("❌ Lỗi: Không thể kết nối lấy dữ liệu bóc tách từ Dashboard API sau 3 lần thử.")
     return ""
 
 def parse_cod_data(text):
@@ -220,23 +221,35 @@ def parse_cod_data(text):
             token_ghn = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcmdDb2RlIjoiZ2huZXhwcmVzcyIsInBhcnRuZXJDb2RlIjoiIiwic2VlZCI6NzkzNTk5NTY0OTU2NDAxMjIyOCwic3NvSWQiOiIzMDY2MDIxIiwidXNlcklkIjoiNjRlMmUyYzI2MmNhZDU1YzZiODRlZTBkIn0.CZd7x6iRVCKRap5NkO_wRs3vusfFTVUBMvgfgM8HbSw'
         headers_lm = {'Authorization': token_ghn, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
 
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+
+        def get_retry_session():
+            session = requests.Session()
+            retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504], raise_on_status=False)
+            adapter = HTTPAdapter(max_retries=retries, pool_connections=15, pool_maxsize=15)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            return session
+
         def scan_hub_orders(bc):
             h_id = str(bc["Mã Bưu Cục"])
             h_name = bc["Tên Bưu Cục"]
             h_am = bc["AM Quản Lý"]
             h_orders = []
-            s = requests.Session()
+            s = get_retry_session()
             trips = []
             for st in ["FINISHED", "ON_TRIP"]:
-                for attempt in range(2):
+                for attempt in range(3):
                     try:
                         r = s.post('https://nhanh-api.ghn.vn/api/lastmile/trip/get-trip-list-by-hub',
-                                   headers=headers_lm, json={'hub_id': h_id, 'status': st, 'limit': 35, 'reverse': 1}, timeout=15)
+                                   headers=headers_lm, json={'hub_id': h_id, 'status': st, 'limit': 35, 'reverse': 1}, timeout=20)
                         if r.status_code == 200:
                             trips.extend(r.json().get('data') or [])
                             break
+                        time.sleep(1)
                     except Exception:
-                        time.sleep(0.5)
+                        time.sleep(1)
             
             seen_t = set()
             for t in trips:
@@ -329,6 +342,16 @@ def parse_cod_data(text):
         for eh in extra_hubs_to_add:
             eh_id_str = str(eh["Mã Bưu Cục"])
             eh_orders = [o for o in don_400k_rows if str(o["Mã Bưu Cục"]) == eh_id_str]
+            if not eh_orders:
+                print(f"🔄 Đang quét bổ sung độc lập cho bưu cục: {eh['Tên Bưu Cục']}...")
+                retry_orders = scan_hub_orders(eh)
+                if retry_orders:
+                    for d in retry_orders:
+                        oc = d.get("Mã Đơn Hàng")
+                        if oc and oc not in seen_orders:
+                            seen_orders.add(oc)
+                            don_400k_rows.append(d)
+                    eh_orders = [o for o in don_400k_rows if str(o["Mã Bưu Cục"]) == eh_id_str]
             if eh_orders:
                 eh_total_cod = sum(o["Tiền COD (VNĐ)"] for o in eh_orders)
                 eh_total_don = len(eh_orders)

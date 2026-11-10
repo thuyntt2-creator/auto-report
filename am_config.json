@@ -750,6 +750,35 @@
       ]
     },
     {
+      "id": "am_trang_tnh",
+      "full_name": "Trần Nguyễn Huyền Trang",
+      "display_name": "AM Huyền Trang (TNH)",
+      "is_active": true,
+      "employee_id": "3189196",
+      "start_date": "2026-11-11",
+      "aliases": [
+        "trần nguyễn huyền trang",
+        "tran nguyen huyen trang",
+        "huyền trang",
+        "huyen trang",
+        "trang am",
+        "trang",
+        "am trang",
+        "am huyền trang",
+        "am huyen trang",
+        "huyền trang am",
+        "kv huyền trang",
+        "kv trang",
+        "khu vực huyền trang",
+        "khu vuc huyen trang",
+        "trangtnh",
+        "tnhtrang",
+        "trang tnh",
+        "tnh trang",
+        "3189196"
+      ]
+    },
+    {
       "id": "am_dai_lm",
       "full_name": "Lê Minh Đại",
       "display_name": "AM Minh Đại (LM)",

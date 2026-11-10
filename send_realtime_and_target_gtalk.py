@@ -72,6 +72,7 @@ AM_CHANNEL_MAP = {
     "Lê Minh Lợi": "2094079507615027200",
     "Nguyễn Đỗ Minh Nghĩa": "2100062122691026944",
     "Phan Nguyễn Yến Nhi": "2105595062412402688",
+    "Trần Nguyễn Huyền Trang": "2117087306460262400",
 }
 
 def get_channel_for_am(am_name):
