@@ -216,16 +216,34 @@ def build_am_message(am_name, df_bc, df_nv, link_tab):
         
         lines.append(f"📍 <b>{bc_name}</b> ({bc_cod:,.0f} đ - {int(bc_don)} đơn{fake_tag}):")
         
-        sorted_nv = group_bc.sort_values(by='Tổng Tiền COD Nghi Vấn (VNĐ)', ascending=False)
-        for _, r in sorted_nv.iterrows():
+        # Sắp xếp ưu tiên: Có Fake GPS trước, sau đó tới Tổng tiền COD giữ
+        sorted_nv = group_bc.sort_values(by=['Số Đơn POD Giả Mạo GPS', 'Tổng Tiền COD Nghi Vấn (VNĐ)'], ascending=[False, False])
+        
+        # Tiêu chí lọc rủi ro: Có Fake GPS > 0 HOẶC COD >= 5,000,000 đ HOẶC Số đơn hoãn >= 3
+        risk_nv = sorted_nv[
+            (sorted_nv['Số Đơn POD Giả Mạo GPS'] > 0) |
+            (sorted_nv['Tổng Tiền COD Nghi Vấn (VNĐ)'] >= 5000000) |
+            (sorted_nv['Số Đơn COD >400k Bị Hoãn'] >= 3)
+        ]
+        
+        # Chỉ lấy tối đa Top 5 shipper nổi cộm nhất để không bêu tên tràn lan cả bưu cục
+        display_nv = risk_nv.head(5) if len(risk_nv) > 0 else sorted_nv.head(3)
+        omitted_count = len(group_bc) - len(display_nv)
+        
+        for _, r in display_nv.iterrows():
             f_val = int(r.get('Số Đơn POD Giả Mạo GPS', 0))
             f_str = f" | 🚨 {f_val} Fake GPS" if f_val > 0 else ""
-            lines.append(f"• MSNV: {r.get('Mã NVPTTT', '')} - {r['Họ Tên NVPTTT']} | COD: {r['Tổng Tiền COD Nghi Vấn (VNĐ)']:,.0f} đ ({int(r['Số Đơn COD >400k Bị Hoãn'])} đơn){f_str}")
+            msnv_val = str(r.get('Mã NVPTTT', '')).strip()
+            msnv_str = f"MSNV: {msnv_val} - " if msnv_val and msnv_val.lower() != 'nan' else ""
+            lines.append(f"• {msnv_str}<b>{r['Họ Tên NVPTTT']}</b> | COD: {r['Tổng Tiền COD Nghi Vấn (VNĐ)']:,.0f} đ ({int(r['Số Đơn COD >400k Bị Hoãn'])} đơn){f_str}")
+        
+        if omitted_count > 0:
+            lines.append(f"↳ <i>(Còn {omitted_count} bưu tá khác có số đơn hoãn nhỏ đã tổng hợp chi tiết trên Sheet)</i>")
         lines.append("")
         
     lines.append("🔗 <b>Link tra cứu chi tiết danh sách MVĐ:</b>")
     lines.append(f'<a href="{link_tab}"><b>Bấm vào đây để mở Sheet MVĐ chi tiết của AM {am_name}</b></a>\n')
-    lines.append("⚠️ <b>Các đơn trên có nguy cơ cao bưu tá đã thu COD nhưng báo lý do ảo để gối đầu tiền: Yêu cầu AM đối soát ngay giữa HÀNG THỰC TẾ TRONG KHO và gọi điện phúc tra trực tiếp khách hàng trước 11h30 trưa nay!</b>")
+    lines.append("⚠️ <b>Các đơn trên có nguy cơ cao bưu tá đã thu COD nhưng báo lý do ảo để gối đầu tiền</b>")
     
     return "\n".join(lines)
 
@@ -282,7 +300,7 @@ def main():
             
         if args.dry_run:
             print(f"\n--- [DRY-RUN XEM TRƯỚC] AM {am_name_clean} (Channel: {channel_id}) ---")
-            print(msg[:300] + "\n...")
+            print(msg)
             sent_count += 1
             continue
             
