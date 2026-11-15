@@ -44,17 +44,22 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def parse_pct(val):
-    """'71.62%' hoặc '0.7162' -> 71.62 ; rỗng/lỗi -> 0.0"""
     if val is None:
         return 0.0
-    s = str(val).strip().replace("%", "").replace(",", ".")
-    if s == "":
+    raw_s = str(val).strip()
+    if raw_s == "":
         return 0.0
+    has_pct = "%" in raw_s
+    s = raw_s.replace("%", "").replace(",", ".").strip()
     try:
         f = float(s)
     except ValueError:
         return 0.0
-    return f * 100 if 0 <= f <= 1.5 else f
+    if has_pct:
+        return f
+    if 0 < f <= 1.0:
+        return f * 100.0
+    return f
 
 
 def parse_num(val):
@@ -176,7 +181,13 @@ def read_baocao_realtime(sheet_key=BAOCAO_SHEET_KEY, tab_name=BAOCAO_TAB_NAME):
         ma_nv = row[i_manv].strip() if (i_manv is not None and i_manv < len(row)) else ""
         gan = parse_num(row[i_gan]) if (i_gan is not None and i_gan < len(row)) else 0
         tc = parse_num(row[i_tc]) if (i_tc is not None and i_tc < len(row)) else 0
-        pct = parse_pct(row[i_pct]) if i_pct < len(row) else 0.0
+        pct = parse_pct(row[i_pct]) if (i_pct is not None and i_pct < len(row)) else 0.0
+        if gan > 0:
+            calc_pct = round(tc / gan * 100.0, 2)
+            if abs(pct - calc_pct) > 0.05 or (tc <= gan and pct > 100.0):
+                pct = calc_pct
+        elif gan == 0:
+            pct = 0.0
         ltc = parse_num(row[i_ltc]) if (i_ltc is not None and i_ltc < len(row)) else 0
         danh_gia = row[i_danhgia].strip() if (i_danhgia is not None and i_danhgia < len(row)) else ""
 
