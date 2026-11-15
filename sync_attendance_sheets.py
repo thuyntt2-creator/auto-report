@@ -513,7 +513,64 @@ def sync_daily_to_sheet(target_date: date = None):
         ws.format(f"P2:P{total_rows}", {"numberFormat": {"type": "CURRENCY", "pattern": "#,##0\" đ\""}, "horizontalAlignment": "RIGHT", "textFormat": {"bold": True}})
         ws.format(f"Q2:Q{total_rows}", {"horizontalAlignment": "CENTER"})
 
+    # ─── TỰ ĐỘNG CẮT TỈA GIỮ TỐI ĐA 30 NGÀY GẦN NHẤT ───────────
+    try:
+        prune_sheet_to_30_days(sh, ws, max_days=30)
+    except Exception as e_prune:
+        print(f"⚠️ Lỗi cắt tỉa 30 ngày: {e_prune}")
+
     print(f"✅ Đã đồng bộ batch thành công ngày {date_display} lên Google Sheet '{SHEET_TITLE}'!")
+
+
+def prune_sheet_to_30_days(sh, ws, max_days=30):
+    """
+    Tự động duy trì bảng tính 'Theo Dõi Phạt AM' chỉ lưu tối đa max_days (mặc định 30 ngày) gần nhất.
+    Các ngày cũ hơn sẽ tự động được xóa bỏ để bảng tính luôn gọn gàng, tải nhanh và không dôi dư dòng.
+    """
+    rows = ws.get_all_values()
+    if len(rows) <= 1:
+        return
+
+    dates_order = []
+    rows_by_date = {}
+    for idx, r in enumerate(rows[1:], start=2):
+        d_str = r[0].strip()
+        if d_str:
+            if d_str not in rows_by_date:
+                dates_order.append(d_str)
+                rows_by_date[d_str] = []
+            rows_by_date[d_str].append((idx, r))
+
+    date_objs = []
+    for d_str in dates_order:
+        try:
+            dt = datetime.strptime(d_str, "%d/%m/%Y")
+            date_objs.append((dt, d_str))
+        except Exception:
+            pass
+
+    date_objs.sort()
+    if len(date_objs) > max_days:
+        excess_count = len(date_objs) - max_days
+        dates_to_remove = date_objs[:excess_count]
+        num_rows_to_delete = sum(len(rows_by_date[d]) for _, d in dates_to_remove)
+        print(f"✂️ Đang cắt bỏ {excess_count} ngày cũ nhất ({num_rows_to_delete} dòng) để giữ đúng {max_days} ngày gần nhất...")
+
+        sh.batch_update({
+            "requests": [
+                {
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "dimension": "ROWS",
+                            "startIndex": 1,
+                            "endIndex": 1 + num_rows_to_delete
+                        }
+                    }
+                }
+            ]
+        })
+        print(f"✅ Đã cắt tỉa thành công, tab '{SHEET_TITLE}' hiện giữ đúng {max_days} ngày gần nhất!")
 
 
 def get_admin_excused_ams(target_date: date = None):
