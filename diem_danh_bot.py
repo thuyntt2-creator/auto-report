@@ -164,6 +164,25 @@ def remove_accents(input_str: str) -> str:
     nfkd_form = unicodedata.normalize('NFKD', s)
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
+# ─── DANH SÁCH LOẠI TRỪ SẾP VÙNG / ADMIN / TRỢ LÝ (Tuyệt đối không điểm danh/phạt) ───
+EXCLUDED_ADMINS = [
+    # Admin / Trợ lý vùng
+    "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin",
+    "thanh thủy ghn", "thanh thuy ghn", "thuyntt", "thuyntt2", "thanhthuy", "thuyntt@ghn.vn", "thuyntt2@ghn.vn",
+    # Sếp Vùng / Ban Quản Lý (Sếp Trần Ngọc Trung - @trungtn)
+    "trần ngọc trung", "tran ngoc trung", "ngọc trung", "ngoc trung", "sếp trung", "sep trung",
+    "trungtn", "trung tn", "@trungtn", "trungtn@ghn.vn"
+]
+
+def is_excluded_manager(sender_name: str = "", sender_id: str = "") -> bool:
+    """Kiểm tra xem người gửi có phải là Sếp Vùng hoặc Admin/Trợ lý hay không."""
+    if not sender_name and not sender_id:
+        return False
+    norm_s = normalize_text(str(sender_name))
+    no_acc_s = remove_accents(norm_s)
+    raw_s = (str(sender_name) + " " + str(sender_id)).lower()
+    return any(exc in norm_s or exc in no_acc_s or exc in raw_s for exc in EXCLUDED_ADMINS)
+
 class AttendanceParser:
     def __init__(self, config):
         self.config = config
@@ -176,12 +195,8 @@ class AttendanceParser:
         norm_sender = normalize_text(sender_name)
         no_acc_sender = remove_accents(norm_sender)
 
-        # ── LOẠI TRỪ ADMIN / QUẢN LÝ / TRỢ LÝ (Không phải AM báo cáo) ──
-        EXCLUDED_ADMINS = [
-            "nguyễn thị thanh thủy", "nguyen thi thanh thuy", "thanh thủy admin", "thuy admin",
-            "thanh thủy ghn", "thanh thuy ghn"
-        ]
-        is_admin_sender = any(exc in norm_sender or exc in no_acc_sender for exc in EXCLUDED_ADMINS)
+        # ── LOẠI TRỪ ADMIN / QUẢN LÝ / TRỢ LÝ / SẾP VÙNG (Không phải AM báo cáo) ──
+        is_admin_sender = is_excluded_manager(sender_name)
 
         # Loại bỏ tag/nhắc tên Admin khỏi nội dung để tránh nhận nhầm sang AM Cao Thị Thanh Thủy
         clean_norm_txt = norm_txt
@@ -464,6 +479,10 @@ def detect_excuse_request(raw_text: str, sender_name: str = "", dt: datetime = N
     """
     if dt is None:
         dt = get_vn_now()
+
+    # 0. BẢO VỆ TUYỆT ĐỐI: LOẠI TRỪ SẾP VÙNG / ADMIN / TRỢ LÝ (Không bao giờ điểm danh hoặc phạt)
+    if is_excluded_manager(sender_name):
+        return None
 
     norm_txt = normalize_text(raw_text)
     no_accent_txt = remove_accents(norm_txt)
@@ -761,6 +780,11 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
     if submit_time is None:
         submit_time = get_vn_now()
 
+    # 0. BẢO VỆ TUYỆT ĐỐI: LOẠI TRỪ SẾP VÙNG / ADMIN / TRỢ LÝ (Không bao giờ điểm danh hoặc phạt)
+    if is_excluded_manager(sender_name, sender_id):
+        print(f"🛡️ [SẾP / ADMIN] Bỏ qua tin nhắn từ {sender_name} ({sender_id}) - Không ghi nhận điểm danh.")
+        return None, "Tin nhắn của Sếp / Quản lý vùng (không phải báo cáo điểm danh AM)"
+
     # BẢO VỆ TUYỆT ĐỐI: Nếu là tin nhắn xin phép / miễn nộp / off phép -> Bỏ qua để detect_excuse_request xử lý!
     if detect_excuse_request(raw_text, sender_name, submit_time, channel_id):
         return None, "Tin nhắn xin phép / miễn nộp"
@@ -782,12 +806,18 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
 
     if m_id == 5 or (channel_id and str(channel_id) == group_b_id):
         # BẢO VỆ CHỐNG BẮT NHẦM CHAT THƯỜNG TRONG GROUP B:
-        # Chỉ xử lý là báo cáo Mốc 5 nếu:
-        # 1. Có bưu cục điểm nóng khớp trong tin nhắn (matched_hubs)
-        # 2. HOẶC tin nhắn có số liệu báo cáo rõ ràng (tồn, xuất hàng, nhân sự)
+        # 1. Câu hỏi thảo luận, hỏi thăm kết thúc bằng '?' hoặc chứa từ ngữ hỏi han -> Bỏ qua
+        is_question = bool(re.search(r'\?|\bsao\s+em\b|\bthế\s+nào\b|\bchưa\s+em\b|\bsao\s+rồi\b|\bổn\s+không\b|\bcheck\s+giúp\b', raw_text, re.IGNORECASE))
+        if is_question:
+            return None, "Câu hỏi thảo luận trong Group B (không phải báo cáo Mốc 5)"
+
+        # 2. Bắt buộc phải có số liệu hoặc cấu trúc báo cáo rõ ràng
         has_metrics = bool(re.search(r'(?:tồn\s*[:/]\s*\d+|ton\s*[:/]\s*\d+|xuất hàng|xuat hang|time xuất|time xuat|nvpttt|nhân sự\s*[:/]|nhan su\s*[:/]|tồn\s*/\s*tổng|ton\s*/\s*tong)', raw_text, re.IGNORECASE))
         if not matched_hubs and not has_metrics:
             return None, "Chat thông thường trong Group B (không phải báo cáo Mốc 5)"
+
+        if len(raw_text.strip().split()) < 6 and not has_metrics:
+            return None, "Tin nhắn trao đổi ngắn trong Group B (không phải báo cáo Mốc 5)"
 
         m_id = 5
         m_name = "BC Điểm nóng (GTC <50%)"
@@ -798,9 +828,7 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
             am_hubs = [h for h in matched_hubs if h.get("am") and h["am"]["id"] == detected_am["id"]]
             if am_hubs:
                 matched_hubs = am_hubs
-        elif not detected_am and matched_hubs and matched_hubs[0].get("am"):
-            # Nếu chưa xác định được AM thì mới lấy AM của bưu cục tìm thấy
-            detected_am = matched_hubs[0]["am"]
+        # TUYỆT ĐỐI KHÔNG TỰ ĐỘNG GÁN AM TỪ TÊN BƯU CỤC NẾU NGƯỜI GỬI KHÔNG PHẢI LÀ AM!
 
     if not m_id:
         return None, "Không phải mẫu báo cáo 1-5"

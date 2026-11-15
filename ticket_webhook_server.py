@@ -765,6 +765,22 @@ def webhook():
             return jsonify({"status": "error", "message": str(e_sup)})
 
 
+    # ─── BẢO VỆ TUYỆT ĐỐI: LOẠI TRỪ SẾP VÙNG / ADMIN / TRỢ LÝ (Không điểm danh / không phạt) ───
+    sender_obj = data.get("sender") or msg_obj.get("sender") or {}
+    sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
+    sender_id = sender_obj.get("id") or str(data.get("senderId") or "")
+    sender_username = sender_obj.get("name") or sender_obj.get("username") or ""
+    sender_email = sender_obj.get("email") or ""
+    full_sender_ident = f"{sender_name} {sender_username} {sender_email} {sender_id}".strip()
+
+    try:
+        from diem_danh_bot import is_excluded_manager
+        if is_excluded_manager(full_sender_ident):
+            print(f"[{ts}] 🛡️ [SẾP / ADMIN] Bỏ qua tin nhắn từ {full_sender_ident} - Không điểm danh / không phạt.")
+            return jsonify({"status": "skipped", "reason": "manager_message"})
+    except Exception as e_mng:
+        print(f"[{ts}] Lỗi check manager: {e_mng}")
+
     # ─── 1. KIỂM TRA TIN NHẮN XIN PHÉP TRỄ / OFF PHÉP / MIỄN BÁO CÁO ────────
     try:
         from diem_danh_bot import detect_excuse_request, send_gtalk_message, load_config
