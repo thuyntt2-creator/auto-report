@@ -457,7 +457,18 @@ def detect_hubs_in_text(text: str):
                     no_acc_v = remove_accents(nv)
                     p_nv = r'(?<!\w)' + re.escape(nv) + r'(?!\w)'
                     p_noacc = r'(?<![a-zA-Z0-9])' + re.escape(no_acc_v) + r'(?![a-zA-Z0-9])'
-                    if re.search(p_nv, norm_msg, re.IGNORECASE) or re.search(p_noacc, no_accent_msg, re.IGNORECASE):
+                    m_match = re.search(p_nv, norm_msg, re.IGNORECASE) or re.search(p_noacc, no_accent_msg, re.IGNORECASE)
+                    if m_match:
+                        # Chống bắt nhầm bưu cục cha/chung khi trong văn bản là bưu cục chi nhánh phương hướng
+                        # Ví dụ: "Tây Nha Trang", "Bắc Nha Trang", "Nam Nha Trang" KHÔNG ĐƯỢC khớp nhầm sang "(KHO) Nha Trang"
+                        start_pos = m_match.start()
+                        prefix_text = norm_msg[:start_pos].rstrip().lower()
+                        prefix_noacc = no_accent_msg[:start_pos].rstrip().lower()
+                        direction_suffixes = ["tây", "tay", "bắc", "bac", "nam", "đông", "dong", "ck", "đl", "dl"]
+                        broad_hubs = ["nha trang", "đà lạt", "da lat", "cam ranh", "phan rang", "ninh hòa", "ninh hoa", "bảo lộc", "bao loc", "gia nghĩa", "gia nghia"]
+                        if (nv in broad_hubs or no_acc_v in broad_hubs) and (any(prefix_text.endswith(d) for d in direction_suffixes) or any(prefix_noacc.endswith(d) for d in direction_suffixes)):
+                            continue
+
                         matched_am = parser.detect_am(am_str, am_str)
                         matched.append({
                             'raw_hub': raw_hub,

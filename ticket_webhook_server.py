@@ -766,8 +766,8 @@ def webhook():
 
 
     # ─── BẢO VỆ TUYỆT ĐỐI: LOẠI TRỪ SẾP VÙNG / ADMIN / TRỢ LÝ (Không điểm danh / không phạt) ───
-    sender_obj = data.get("sender") or msg_obj.get("sender") or {}
-    sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or ""
+    sender_obj = data.get("sender") or msg_obj.get("sender") or data.get("user") or {}
+    sender_name = sender_obj.get("displayName") or sender_obj.get("name") or data.get("senderName") or data.get("user", {}).get("displayName") or ""
     sender_id = sender_obj.get("id") or str(data.get("senderId") or "")
     sender_username = sender_obj.get("name") or sender_obj.get("username") or ""
     sender_email = sender_obj.get("email") or ""
