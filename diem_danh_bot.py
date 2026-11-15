@@ -839,7 +839,16 @@ def record_submission(sender_name, sender_id, raw_text, channel_id, msg_id, subm
             am_hubs = [h for h in matched_hubs if h.get("am") and h["am"]["id"] == detected_am["id"]]
             if am_hubs:
                 matched_hubs = am_hubs
-        # TUYỆT ĐỐI KHÔNG TỰ ĐỘNG GÁN AM TỪ TÊN BƯU CỤC NẾU NGƯỜI GỬI KHÔNG PHẢI LÀ AM!
+        elif not detected_am and matched_hubs and has_metrics:
+            # Nếu tin nhắn có đầy đủ số liệu báo cáo nhưng người gửi chưa xác định được AM (hoặc nick lạ/không có alias),
+            # tự động nhận diện AM dựa vào danh sách bưu cục theo tab 'BC GTC dưới 50' (cơ chế đa số phiếu - majority vote):
+            from collections import Counter
+            am_counts = Counter(h["am"]["id"] for h in matched_hubs if h.get("am"))
+            if am_counts:
+                top_am_id, _ = am_counts.most_common(1)[0]
+                top_am_obj = next(h["am"] for h in matched_hubs if h.get("am") and h["am"]["id"] == top_am_id)
+                detected_am = top_am_obj
+                matched_hubs = [h for h in matched_hubs if h.get("am") and h["am"]["id"] == top_am_id]
 
     if not m_id:
         return None, "Không phải mẫu báo cáo 1-5"
