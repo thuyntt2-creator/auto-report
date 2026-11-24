@@ -86,6 +86,7 @@ AM_CHANNEL_MAP = {
     "Nguyễn Đỗ Minh Nghĩa": "2100062122691026944",
     "Phan Nguyễn Yến Nhi": "2105595062412402688",
     "Trần Nguyễn Huyền Trang": "2117087306460262400",
+    "Nguyễn Hải Đông": "2122170308762284032",
 }
 DEFAULT_CHANNEL_ID = "2077277510775197696"
 
